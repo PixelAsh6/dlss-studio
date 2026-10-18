@@ -1,5 +1,5 @@
 use dlss_studio::core::state::STATE_TEST_MUTEX;
-use dlss_studio::core::addons::installer::*;
+use dlss_studio::core::addons::{installer::*, AddonId};
 use crate::common::TempDir;
 use std::fs;
 
@@ -46,6 +46,62 @@ fn test_extract_reshade_from_setup_success() {
     assert_eq!(fs::read(out_dir.join("ReShade32.json")).unwrap(), br#"{"layer": 32}"#);
 }
 
+#[test]
+fn test_extract_streamline_from_sdk_success() {
+    let temp = TempDir::new("streamline_sdk_archive");
+    let zip_path = temp.join("streamline-sdk-v2.14.1.zip");
+    {
+        let file = fs::File::create(&zip_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+
+        // SDK runtime DLLs
+        writer.start_file("bin/x64/sl.interposer.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"sdk sl.interposer 2.14.1").unwrap();
+        writer.start_file("bin/x64/sl.common.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"sdk sl.common 2.14.1").unwrap();
+        writer.start_file("bin/x64/sl.dlss_g.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"sdk sl.dlss_g 2.14.1").unwrap();
+        writer.start_file("bin/x64/sl.reflex.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"sdk sl.reflex 2.14.1").unwrap();
+
+        // SDK runtime component sl.pcl.dll
+        writer.start_file("bin/x64/sl.pcl.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"sdk sl.pcl 2.14.1").unwrap();
+
+        // Development and non-runtime files that must be skipped
+        writer.start_file("bin/x64/development/sl.interposer.dll", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"dev sl.interposer").unwrap();
+        writer.start_file("include/sl.h", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"#pragma once").unwrap();
+        writer.start_file("docs/README.md", options).unwrap();
+        std::io::Write::write_all(&mut writer, b"# Streamline SDK").unwrap();
+
+        writer.finish().unwrap();
+    }
+
+    let out_dir = temp.join("extracted_streamline");
+    let file = fs::File::open(&zip_path).unwrap();
+    let res = extract_streamline_from_sdk(file, &out_dir);
+    assert!(res.is_ok(), "extract_streamline_from_sdk failed: {:?}", res);
+
+    assert!(out_dir.join("sl.interposer.dll").is_file());
+    assert!(out_dir.join("sl.common.dll").is_file());
+    assert!(out_dir.join("sl.dlss_g.dll").is_file());
+    assert!(out_dir.join("sl.reflex.dll").is_file());
+
+    assert_eq!(fs::read(out_dir.join("sl.interposer.dll")).unwrap(), b"sdk sl.interposer 2.14.1");
+    assert_eq!(fs::read(out_dir.join("sl.common.dll")).unwrap(), b"sdk sl.common 2.14.1");
+
+    assert!(out_dir.join("sl.pcl.dll").is_file());
+    assert_eq!(fs::read(out_dir.join("sl.pcl.dll")).unwrap(), b"sdk sl.pcl 2.14.1");
+
+    // Subdirectories from SDK must not be extracted
+    assert!(!out_dir.join("development").exists());
+    assert!(!out_dir.join("include").exists());
+    assert!(!out_dir.join("docs").exists());
+}
+
 
 #[test]
 fn test_feeder_shaders_validation_structure() {
@@ -72,6 +128,7 @@ fn test_feeder_shaders_validation_structure() {
 
 #[tokio::test]
 async fn test_feeder_components_live_assembly() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut log = Vec::new();
     let res = ensure_feeder_components(&mut log).await;
     assert!(res.is_ok(), "ensure_feeder_components failed: {:?}", res);
@@ -81,6 +138,7 @@ async fn test_feeder_components_live_assembly() {
 
 #[tokio::test]
 async fn test_ensure_mfg_and_mip_fix_addons() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut log = Vec::new();
     // If the files exist in components root or can be resolved
     let mfg_res = ensure_mfg_v09_addon(&mut log).await;
@@ -94,6 +152,7 @@ async fn test_ensure_mfg_and_mip_fix_addons() {
 
 #[tokio::test]
 async fn test_ensure_dgvoodoo_components_resolves() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut log = Vec::new();
     let res = ensure_dgvoodoo_components(&mut log).await;
     assert!(res.is_ok() || res.is_err());
@@ -101,6 +160,7 @@ async fn test_ensure_dgvoodoo_components_resolves() {
 
 #[tokio::test]
 async fn test_ensure_all_mandatory_components_progress_callback() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut progress_events = Vec::new();
     let res = ensure_all_mandatory_components_with_progress(|p| {
         progress_events.push(p);
@@ -111,6 +171,7 @@ async fn test_ensure_all_mandatory_components_progress_callback() {
 
 #[tokio::test]
 async fn test_ensure_mfg_and_mip_fix_cache_hit_paths() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let comp_root = dlss_studio::core::addons::cache::get_components_root();
     let mfg_dir = comp_root.join("mfg-unlock-1.0");
     let fix_dir = comp_root.join("dlss-mip-fix");
@@ -204,7 +265,7 @@ async fn test_ensure_all_mandatory_components_cached_fast_path() {
     ];
 
     let paths = [
-        comp_root.join("renodx-dlss5/renodx-dlss5.addon64"),
+        comp_root.join("renodx-dlss/renodx-dlss.addon64"),
         comp_root.join("dlss-mip-fix/dlss-mip-fix.addon64"),
         comp_root.join("mfg-unlock-1.0/renodx-mfgunlock.addon64"),
         comp_root.join("mfg-standalone/RTXMFG.dll"),
@@ -214,8 +275,8 @@ async fn test_ensure_all_mandatory_components_cached_fast_path() {
         comp_root.join("feeder-shaders/Shaders/vort_Motion.fx"),
         comp_root.join("feeder-shaders/Textures/vort_BlueNoise.png"),
         comp_root.join("OptiScaler-0.8.4-dlssnr/OptiScaler.dll"),
-        comp_root.join("streamline-2.14.1/streamline/sl.interposer.dll"),
-        comp_root.join("streamline-2.14.1/streamline/sl.common.dll"),
+        comp_root.join("streamline/sl.interposer.dll"),
+        comp_root.join("streamline/sl.common.dll"),
         comp_root.join("reshade-vulkan/ReShade64.json"),
         comp_root.join("dgvoodoo/x64/D3D9.dll"),
         comp_root.join("dgvoodoo/x86/D3D9.dll"),
@@ -247,7 +308,7 @@ async fn test_ensure_all_mandatory_components_cached_fast_path() {
     let res = ensure_all_mandatory_components_with_progress(|p| {
         progress.push(p);
     }).await;
-    assert!(res.is_ok());
+    assert!(res.is_ok(), "ensure_all_mandatory_components failed: {:?}", res);
 
     let mut log = Vec::new();
     let dgv = ensure_dgvoodoo_components(&mut log).await;
@@ -347,3 +408,153 @@ fn test_ensure_feeder_components_populates_textures_and_includes_complete_tree()
     assert!(target_shaders.join("DLSS5_Feed.fx").is_file(), "DLSS5_Feed.fx must exist in feeder-shaders/Shaders/");
     assert!(target_shaders.join("vort_Motion.fx").is_file(), "vort_Motion.fx must exist in feeder-shaders/Shaders/");
 }
+
+#[tokio::test]
+async fn test_renodx_installer_local_candidate_fast_path() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+    let local_exists = [
+        "external_assets/renodx-dlss.addon64",
+        "dist/renodx-dlss.addon64",
+        "target/release/renodx-dlss.addon64",
+        "target/debug/renodx-dlss.addon64",
+    ].iter().any(|p| std::path::Path::new(p).is_file());
+
+    if !local_exists {
+        println!("No local prebuilt renodx-dlss.addon64 candidate present on this runner; skipping local candidate copy assertion.");
+        return;
+    }
+
+    let comp_root = dlss_studio::core::addons::cache::get_components_root();
+    let renodx_dir = comp_root.join("renodx-dlss");
+    let target = renodx_dir.join("renodx-dlss.addon64");
+
+    // Force install with external_assets present in project root
+    let res = install_or_update_addon(AddonId::RenoDxDlss5, true, |_| {}).await;
+    assert!(res.is_ok(), "install_or_update_addon for RenoDxDlss5 failed: {:?}", res);
+    assert!(target.is_file(), "renodx-dlss.addon64 must exist in components/renodx-dlss");
+
+    let meta = fs::metadata(&target).unwrap();
+    assert_eq!(meta.len(), 3333632, "Target renodx-dlss.addon64 must match size");
+
+    let ver = dlss_studio::core::addons::get_local_addon_version(AddonId::RenoDxDlss5);
+    assert!(ver.is_some(), "Detected version must be resolved");
+}
+
+#[test]
+fn test_clean_stale_addon_cache_mfg_unlock() {
+    let temp = TempDir::new("mfg_unlock_cleanup");
+    let comp_root = temp.path();
+
+    let old_dir_08 = comp_root.join("mfg-unlock-0.8");
+    let old_dir_09 = comp_root.join("mfg-unlock-0.9");
+    let target_dir = comp_root.join("mfg-unlock-1.0");
+    let stale_zip = comp_root.join("mfg-unlock-0.9.zip");
+
+    fs::create_dir_all(&old_dir_08).unwrap();
+    fs::create_dir_all(&old_dir_09).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(old_dir_08.join("renodx-mfgunlock.addon64"), b"old 0.8").unwrap();
+    fs::write(old_dir_09.join("renodx-mfgunlock.addon64"), b"old 0.9").unwrap();
+    fs::write(target_dir.join("renodx-mfgunlock.addon64"), b"new 1.0").unwrap();
+    fs::write(&stale_zip, b"zip data").unwrap();
+
+    clean_stale_addon_cache(comp_root, AddonId::RenoDxMfgUnlock, Some(&target_dir));
+
+    assert!(target_dir.join("renodx-mfgunlock.addon64").is_file(), "Active target directory must be preserved");
+    assert!(!old_dir_08.exists(), "Stale mfg-unlock-0.8 directory must be deleted");
+    assert!(!old_dir_09.exists(), "Stale mfg-unlock-0.9 directory must be deleted");
+    assert!(!stale_zip.exists(), "Stale mfg-unlock zip must be deleted");
+}
+
+#[test]
+fn test_clean_stale_addon_cache_streamline() {
+    let temp = TempDir::new("streamline_cleanup");
+    let comp_root = temp.path();
+
+    let old_streamline = comp_root.join("streamline-2.14.1");
+    let target_dir = comp_root.join("streamline");
+    let stale_zip = comp_root.join("streamline-sdk-v2.14.1.zip");
+
+    fs::create_dir_all(old_streamline.join("streamline")).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(old_streamline.join("streamline").join("sl.interposer.dll"), b"old").unwrap();
+    fs::write(old_streamline.join("sl.pcl.dll"), b"crash pcl").unwrap();
+    fs::write(target_dir.join("sl.interposer.dll"), b"new").unwrap();
+    fs::write(target_dir.join("sl.pcl.dll"), b"crash pcl in target").unwrap();
+    fs::write(&stale_zip, b"zip data").unwrap();
+
+    clean_stale_addon_cache(comp_root, AddonId::Streamline, Some(&target_dir));
+
+    assert!(target_dir.join("sl.interposer.dll").is_file(), "Active streamline directory must be preserved");
+    assert!(target_dir.join("sl.pcl.dll").is_file(), "sl.pcl.dll must be preserved");
+    assert!(!old_streamline.exists(), "Stale streamline-2.14.1 directory must be deleted");
+    assert!(!stale_zip.exists(), "Stale streamline zip archive must be deleted");
+}
+
+#[test]
+fn test_clean_stale_addon_cache_optiscaler_and_feeder() {
+    let temp = TempDir::new("opti_feeder_cleanup");
+    let comp_root = temp.path();
+
+    let old_opti = comp_root.join("OptiScaler-0.7-dlss5");
+    let target_opti = comp_root.join("OptiScaler-1.2.1-dlss5");
+    let stale_opti_zip = comp_root.join("OptiScaler-latest.zip");
+
+    let old_feeder = comp_root.join("DLSS5-Feeder-1.18.0");
+    let target_feeder = comp_root.join("DLSS5-Feeder-1.19.0");
+    let stale_feeder_zip = comp_root.join("DLSS5-Feeder-1.18.0.zip");
+
+    fs::create_dir_all(&old_opti).unwrap();
+    fs::create_dir_all(&target_opti).unwrap();
+    fs::write(old_opti.join("OptiScaler.dll"), b"old").unwrap();
+    fs::write(target_opti.join("OptiScaler.dll"), b"new").unwrap();
+    fs::write(&stale_opti_zip, b"zip").unwrap();
+
+    fs::create_dir_all(&old_feeder).unwrap();
+    fs::create_dir_all(&target_feeder).unwrap();
+    fs::write(old_feeder.join("dlss5-feed.addon64"), b"old").unwrap();
+    fs::write(target_feeder.join("dlss5-feed.addon64"), b"new").unwrap();
+    fs::write(&stale_feeder_zip, b"zip").unwrap();
+
+    clean_stale_addon_cache(comp_root, AddonId::OptiScaler, Some(&target_opti));
+    clean_stale_addon_cache(comp_root, AddonId::Dlss5Feeder, Some(&target_feeder));
+
+    assert!(target_opti.join("OptiScaler.dll").is_file(), "Active OptiScaler directory must be preserved");
+    assert!(!old_opti.exists(), "Stale OptiScaler directory must be deleted");
+    assert!(!stale_opti_zip.exists(), "Stale OptiScaler zip must be deleted");
+
+    assert!(target_feeder.join("dlss5-feed.addon64").is_file(), "Active Feeder directory must be preserved");
+    assert!(!old_feeder.exists(), "Stale Feeder directory must be deleted");
+    assert!(!stale_feeder_zip.exists(), "Stale Feeder zip must be deleted");
+}
+
+#[test]
+fn test_clean_all_stale_addon_caches_startup_sweep() {
+    let temp = TempDir::new("startup_sweep");
+    let comp_root = temp.path();
+
+    let orphan_mfg = comp_root.join("mfg-unlock-0.9");
+    let orphan_streamline = comp_root.join("streamline-2.14.1");
+    let active_mfg = comp_root.join("mfg-unlock-1.0");
+    let active_streamline = comp_root.join("streamline");
+
+    fs::create_dir_all(&orphan_mfg).unwrap();
+    fs::create_dir_all(&orphan_streamline).unwrap();
+    fs::create_dir_all(&active_mfg).unwrap();
+    fs::create_dir_all(&active_streamline).unwrap();
+
+    fs::write(orphan_mfg.join("renodx-mfgunlock.addon64"), b"orphan").unwrap();
+    fs::write(orphan_streamline.join("sl.interposer.dll"), b"orphan").unwrap();
+    fs::write(active_mfg.join("renodx-mfgunlock.addon64"), b"active").unwrap();
+    fs::write(active_streamline.join("sl.interposer.dll"), b"active").unwrap();
+
+    clean_all_stale_addon_caches(comp_root);
+
+    assert!(active_mfg.is_dir(), "Active mfg-unlock-1.0 must be preserved");
+    assert!(active_streamline.is_dir(), "Active streamline must be preserved");
+    assert!(!orphan_mfg.exists(), "Orphaned mfg-unlock-0.9 must be swept");
+    assert!(!orphan_streamline.exists(), "Orphaned streamline-2.14.1 must be swept");
+}
+
+

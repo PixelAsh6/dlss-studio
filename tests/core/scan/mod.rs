@@ -126,7 +126,7 @@ fn test_manifest_preserves_target_exe_and_patch_state() {
         game_exe: Some("bin\\game_dx11.exe".to_string()),
         backup_prefix: Some("originals/123".to_string()),
         replaced: Vec::new(),
-        added: vec!["bin\\dxgi.dll".to_string(), "bin\\renodx-dlss5.addon64".to_string()],
+        added: vec!["bin\\dxgi.dll".to_string(), "bin\\renodx-dlss.addon64".to_string()],
         added_dirs: Vec::new(),
         mfg_unlock: Some(true),
         mfg_multiplier: Some(4),
@@ -160,7 +160,7 @@ fn test_scan_infers_route_from_disk_when_manifest_missing() {
     exe_bytes[100..117].copy_from_slice(b"D3D12CreateDevice");
     fs::write(&exe_path, &exe_bytes).unwrap();
 
-    fs::write(bin_dir.join("renodx-dlss5.addon64"), b"DUMMY_ADDON").unwrap();
+    fs::write(bin_dir.join("renodx-dlss.addon64"), b"DUMMY_ADDON").unwrap();
     let scanned = scan_game_directory(&temp_dir).expect("Scan must succeed");
     assert_eq!(scanned.installed_route, Some("native".to_string()));
 

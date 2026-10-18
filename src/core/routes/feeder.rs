@@ -453,11 +453,23 @@ pub fn deploy_feeder_with_bundle(opts: &DeployOptions, payloads: &PayloadBundle)
     if renodx_active && bitness == 64 {
         if let Some(renodx_src) = &payloads.renodx_dlss5_addon {
             if renodx_src.is_file() {
-                let dest = mod_root.join("renodx-dlss5.addon64");
+                let file_name = renodx_src.file_name().and_then(|n| n.to_str()).unwrap_or("renodx-dlss.addon64");
+                let dest = mod_root.join(file_name);
                 track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, renodx_src, &dest, "addon", &mut log)
-                    .map_err(|e| format!("Failed to copy renodx-dlss5.addon64: {}", e))?;
-                deployed_addon_stems.push("renodx-dlss5".to_string());
-                log.push("[FEEDER-DLSS5] renodx-dlss5.addon64 deployed for Streamline Neural Rendering".to_string());
+                    .map_err(|e| format!("Failed to copy {}: {}", file_name, e))?;
+                let stem = renodx_src.file_stem().and_then(|s| s.to_str()).unwrap_or("renodx-dlss").to_string();
+                deployed_addon_stems.push(stem);
+                log.push(format!("[FEEDER-DLSS5] {} deployed for Streamline Neural Rendering", file_name));
+
+                let conflicting = ["renodx-dlss5.addon64", "renodx-dlss.addon64"];
+                for c in &conflicting {
+                    if *c != file_name {
+                        let stale = mod_root.join(c);
+                        if stale.is_file() {
+                            let _ = fs::remove_file(&stale);
+                        }
+                    }
+                }
             }
         }
 
@@ -530,9 +542,19 @@ pub fn deploy_feeder_with_bundle(opts: &DeployOptions, payloads: &PayloadBundle)
                     if renodx_active {
                         if let Some(renodx) = &payloads.renodx_dlss5_addon {
                             if renodx.is_file() {
-                                let dest_renodx = host64_dir.join("renodx-dlss5.addon64");
+                                let file_name = renodx.file_name().and_then(|n| n.to_str()).unwrap_or("renodx-dlss.addon64");
+                                let dest_renodx = host64_dir.join(file_name);
                                 track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, renodx, &dest_renodx, "feeder-host-addon", &mut log)
-                                    .map_err(|e| format!("Failed to copy renodx-dlss5.addon64 to host64: {}", e))?;
+                                    .map_err(|e| format!("Failed to copy {} to host64: {}", file_name, e))?;
+                                let conflicting = ["renodx-dlss5.addon64", "renodx-dlss.addon64"];
+                                for c in &conflicting {
+                                    if *c != file_name {
+                                        let stale = host64_dir.join(c);
+                                        if stale.is_file() {
+                                            let _ = fs::remove_file(&stale);
+                                        }
+                                    }
+                                }
                             }
                         }
                         if let Some(fix) = &payloads.dlss5_d3d12_fix_addon {

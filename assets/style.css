@@ -2547,8 +2547,15 @@ select option {
     to { transform: rotate(360deg); }
 }
 .spin-icon {
-    animation: spin-anim 1s linear infinite;
+    animation: spin-anim 0.8s linear infinite;
     display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(128, 128, 128, 0.3);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    vertical-align: middle;
+    box-sizing: border-box;
 }
 
 

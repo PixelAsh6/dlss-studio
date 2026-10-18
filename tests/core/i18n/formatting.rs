@@ -26,6 +26,24 @@ fn test_format_log_entry_multilingual_substitution() {
     assert_eq!(format_log_entry("de", raw_restore_ok), "Originale Spieledateien erfolgreich wiederhergestellt");
     assert_eq!(format_log_entry("es", raw_restore_ok), "Archivos originales del juego restaurados con éxito");
 
+    let raw_art = "@{log_cleaned_orphaned_art|2|1287}";
+    assert_eq!(format_log_entry("en", raw_art), "Cleaned 2 orphaned art files (reclaimed 1287 KB)");
+    assert_eq!(format_log_entry("it", raw_art), "File grafici orfani ripuliti: 2 (recuperati 1287 KB)");
+    assert_eq!(format_log_entry("de", raw_art), "2 verwaiste Artwork-Dateien bereinigt (1287 KB freigegeben)");
+    assert_eq!(format_log_entry("zh", raw_art), "已清理 2 个孤立的游戏封面文件（释放 1287 KB）");
+
+    let raw_add = "@{log_added_game|Cyberpunk 2077}";
+    assert_eq!(format_log_entry("en", raw_add), "Added game: Cyberpunk 2077");
+    assert_eq!(format_log_entry("it", raw_add), "Gioco aggiunto: Cyberpunk 2077");
+
+    let raw_folder = "@{log_added_folder|D:\\Games|5}";
+    assert_eq!(format_log_entry("en", raw_folder), "Added library folder: D:\\Games (found 5 games)");
+    assert_eq!(format_log_entry("it", raw_folder), "Cartella libreria aggiunta: D:\\Games (trovati 5 giochi)");
+
+    let raw_none = "@{log_no_game_found|C:\\Empty}";
+    assert_eq!(format_log_entry("en", raw_none), "No game found in C:\\Empty");
+    assert_eq!(format_log_entry("it", raw_none), "Nessun gioco trovato in C:\\Empty");
+
     let plain = "Unformatted plain text diagnostic message";
     assert_eq!(format_log_entry("fr", plain), plain);
 

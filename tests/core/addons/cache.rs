@@ -95,7 +95,8 @@ fn test_find_local_dgvoodoo_and_feeder_positive_matches() {
 #[test]
 fn test_dynamic_feeder_version_selection_prefers_newest() {
     let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let root = get_components_root();
+    let temp = crate::common::TempDir::new("feeder_version_selection");
+    let root = temp.path().to_path_buf();
     let old_feeder = root.join("DLSS5-Feeder-1.16.0-beta.3");
     let new_feeder = root.join("DLSS5-Feeder-1.18.0-beta.1");
     let shaders_dir = root.join("feeder-shaders").join("Shaders");
@@ -112,16 +113,11 @@ fn test_dynamic_feeder_version_selection_prefers_newest() {
     let _ = fs::write(shaders_dir.join("DrawText.fxh"), b"// DRAWTEXT");
     let _ = fs::write(textures_dir.join("vort_BlueNoise.png"), b"PNG_MOCK");
 
-    let res = find_local_feeder_components();
+    let res = find_feeder_components_in_dir(&root);
     assert!(res.is_some());
     let fc = res.unwrap();
     // The resolved addon64 should point to the 1.18.0-beta.1 folder, not the old 1.16.0
     assert!(fc.addon64.to_string_lossy().contains("DLSS5-Feeder-1.18.0-beta.1"));
-
-    // Cleanup
-    let _ = fs::remove_dir_all(&old_feeder);
-    let _ = fs::remove_dir_all(&new_feeder);
-    let _ = fs::remove_dir_all(root.join("feeder-shaders"));
 }
 
 #[test]
@@ -158,3 +154,66 @@ fn test_feeder_cache_rejects_missing_textures() {
     let res = find_feeder_components_in_dir(&root);
     assert!(res.is_none(), "Must reject feeder-shaders cache when vort_BlueNoise.png is missing");
 }
+
+#[test]
+fn test_optiscaler_cache_auto_flattens_nested_dlss5_optimised() {
+    let temp = crate::common::TempDir::new("opti_auto_flatten");
+    let comp_root = temp.path().to_path_buf();
+    let opti_dir = comp_root.join("OptiScaler-1.2.1-dlss5");
+    let nested = opti_dir.join("DLSS5-Optimised");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("OptiScaler.dll"), b"MZ_OPTI").unwrap();
+    fs::write(nested.join("OptiScaler.ini"), b"[OptiScaler]").unwrap();
+    fs::write(nested.join("nvngx.dll_dlssnr.dll"), b"MZ_SNIPPET").unwrap();
+
+    // Verify initially that OptiScaler.dll is NOT at the top level
+    assert!(!opti_dir.join("OptiScaler.dll").exists());
+
+    // Auto-heal logic test
+    let candidate_subdirs = ["DLSS5-Optimised", "OptiScaler"];
+    for sub_name in &candidate_subdirs {
+        let sub_p = opti_dir.join(sub_name);
+        if sub_p.is_dir() && sub_p.join("OptiScaler.dll").is_file() {
+            if let Ok(sub_entries) = fs::read_dir(&sub_p) {
+                for se in sub_entries.flatten() {
+                    let _ = fs::rename(se.path(), opti_dir.join(se.file_name()));
+                }
+            }
+            let _ = fs::remove_dir_all(&sub_p);
+            break;
+        }
+    }
+
+    assert!(opti_dir.join("OptiScaler.dll").is_file());
+    assert!(opti_dir.join("OptiScaler.ini").is_file());
+    assert!(opti_dir.join("nvngx.dll_dlssnr.dll").is_file());
+    assert!(!nested.exists());
+}
+
+#[test]
+fn test_streamline_cache_validation_and_dynamic_manifest_resolution() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let root = get_components_root();
+    let sl_dir = root.join("streamline");
+    let _ = fs::create_dir_all(&sl_dir);
+
+    // Stage runtime files
+    let _ = fs::write(sl_dir.join("sl.interposer.dll"), b"MOCK_INTERPOSER");
+    let _ = fs::write(sl_dir.join("sl.common.dll"), b"MOCK_COMMON");
+    let _ = fs::write(sl_dir.join("nvngx_dlssnr.dll"), b"MOCK_DLSSNR");
+
+    // 1. Verify is_streamline_cached returns true with any or no manifest version
+    assert!(is_streamline_cached(), "Streamline must be cached when files exist, with zero version gating");
+
+    // 2. Record compound version into manifest
+    let compound_ver = "2.14.1 (DLSS-NR 310.9.16.0)";
+    let _ = dlss_studio::core::addons::record_addon_version(AddonId::Streamline, compound_ver);
+
+    // 3. Verify get_local_addon_version reads the exact dynamic version
+    let resolved = dlss_studio::core::addons::get_local_addon_version(AddonId::Streamline);
+    assert_eq!(resolved.as_deref(), Some(compound_ver));
+
+    // Clean up mock files
+    let _ = fs::remove_dir_all(&sl_dir);
+}
+

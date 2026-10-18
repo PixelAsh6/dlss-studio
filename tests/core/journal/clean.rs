@@ -38,12 +38,14 @@ fn test_clean_untracked_mods_nested_reshade() {
 
     let nested_exe = nested_dir.join("MockCyberpunk2077.exe");
     let reshade_dxgi = nested_dir.join("dxgi.dll");
-    let renodx_addon = nested_dir.join("renodx-dlss5.addon64");
+    let renodx_addon = nested_dir.join("renodx-dlss.addon64");
+    let legacy_renodx = nested_dir.join("renodx-dlss5.addon64");
     let mfg_addon = nested_dir.join("renodx-mfgunlock.addon64");
     let reshade_ini = nested_dir.join("ReShade.ini");
 
     fs::write(&nested_exe, b"MZ dummy exe").unwrap();
     fs::write(&renodx_addon, b"addon").unwrap();
+    fs::write(&legacy_renodx, b"legacy addon").unwrap();
     fs::write(&mfg_addon, b"mfg").unwrap();
     fs::write(&reshade_ini, b"[INPUT]\nKeyOverlay=36").unwrap();
 
@@ -53,12 +55,14 @@ fn test_clean_untracked_mods_nested_reshade() {
 
     let removed = clean_untracked_mods_with_exe(temp.path(), Some(&nested_exe)).unwrap();
     assert!(removed.contains(&"dxgi.dll".to_string()));
+    assert!(removed.contains(&"renodx-dlss.addon64".to_string()));
     assert!(removed.contains(&"renodx-dlss5.addon64".to_string()));
     assert!(removed.contains(&"renodx-mfgunlock.addon64".to_string()));
     assert!(removed.contains(&"ReShade.ini".to_string()));
 
     assert!(!reshade_dxgi.exists(), "Nested dxgi.dll must be cleaned");
-    assert!(!renodx_addon.exists(), "Nested renodx-dlss5.addon64 must be cleaned");
+    assert!(!renodx_addon.exists(), "Nested renodx-dlss.addon64 must be cleaned");
+    assert!(!legacy_renodx.exists(), "Nested renodx-dlss5.addon64 must be cleaned");
     assert!(!mfg_addon.exists(), "Nested renodx-mfgunlock.addon64 must be cleaned");
     assert!(!reshade_ini.exists(), "Nested ReShade.ini must be cleaned");
     assert!(nested_exe.exists(), "Game executable must remain intact");

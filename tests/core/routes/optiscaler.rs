@@ -69,7 +69,7 @@ fn create_mock_payload_bundle(temp: &Path) -> PayloadBundle {
     let reshade32 = temp.join("ReShade32.dll");
     fs::write(&reshade32, b"MOCK_RESHADE32_PE_BYTES").unwrap();
 
-    let renodx = temp.join("renodx-dlss5.addon64");
+    let renodx = temp.join("renodx-dlss.addon64");
     fs::write(&renodx, b"MOCK_RENODX_PE_BYTES").unwrap();
 
     let fix = temp.join("dlss5-d3d12-fix.addon64");
@@ -370,12 +370,12 @@ fn test_deploy_respects_addon_toggles() {
 
     let res = deploy_native_dlss5(&opts).expect("deploy should succeed");
     assert!(res.success);
-    assert!(content_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 should be deployed as mandatory base");
+    assert!(content_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 should be deployed as mandatory base");
     assert!(content_dir.join("test_custom.addon64").exists(), "custom addon should be deployed when active");
 
     let rest_res = dlss_studio::core::journal::restore_game(&content_dir).expect("restore should succeed");
     assert!(rest_res);
-    assert!(!content_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 should be deleted on restore");
+    assert!(!content_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 should be deleted on restore");
     assert!(!content_dir.join("test_custom.addon64").exists(), "custom addon should be deleted on restore");
 
     dlss_studio::core::state::toggle_addon_in_state(&mut state, &custom_addon_file.to_string_lossy(), false);
@@ -383,7 +383,7 @@ fn test_deploy_respects_addon_toggles() {
 
     let res2 = deploy_native_dlss5(&opts).expect("deploy should succeed");
     assert!(res2.success);
-    assert!(content_dir.join("renodx-dlss5.addon64").exists(), "mandatory base addon is still deployed");
+    assert!(content_dir.join("renodx-dlss.addon64").exists(), "mandatory base addon is still deployed");
     assert!(!content_dir.join("test_custom.addon64").exists(), "custom addon should NOT be deployed when deactivated");
 
     dlss_studio::core::state::remove_custom_addon(&mut state, &custom_addon_file.to_string_lossy());
@@ -395,9 +395,9 @@ fn test_native_dlss5_nested_deploy_and_clean_lifecycle() {
     let _state_lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let comp_root = dlss_studio::core::addons::cache::get_components_root();
     let mfg_mock = comp_root.join("mfg-unlock-1.0").join("renodx-mfgunlock.addon64");
-    let renodx_mock = comp_root.join("renodx-dlss5").join("renodx-dlss5.addon64");
+    let renodx_mock = comp_root.join("renodx-dlss").join("renodx-dlss.addon64");
     let _ = fs::create_dir_all(comp_root.join("mfg-unlock-1.0"));
-    let _ = fs::create_dir_all(comp_root.join("renodx-dlss5"));
+    let _ = fs::create_dir_all(comp_root.join("renodx-dlss"));
     if !mfg_mock.exists() { let _ = fs::write(&mfg_mock, b"MFG_MOCK"); }
     if !renodx_mock.exists() { let _ = fs::write(&renodx_mock, b"RENODX_MOCK"); }
     if find_optiscaler_payload().is_none() || find_renodx_payload().is_none() {
@@ -444,7 +444,7 @@ fn test_native_dlss5_nested_deploy_and_clean_lifecycle() {
     assert!(res.success);
 
     assert!(bin_dir.join("dxgi.dll").exists(), "dxgi.dll hook should be deployed in nested bin/x64");
-    assert!(bin_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 should be in bin/x64");
+    assert!(bin_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 should be in bin/x64");
     assert!(bin_dir.join("renodx-mfgunlock.addon64").exists(), "renodx-mfgunlock.addon64 should be in bin/x64");
     assert!(bin_dir.join("ReShade.ini").exists(), "ReShade.ini should be in bin/x64");
 
@@ -455,11 +455,11 @@ fn test_native_dlss5_nested_deploy_and_clean_lifecycle() {
 
     let removed = dlss_studio::core::journal::clean_untracked_mods_with_exe(temp.path(), Some(&exe_path)).expect("clean should succeed");
     assert!(removed.iter().any(|r| r.contains("dxgi.dll")), "Cleaned files must include dxgi.dll: {:?}", removed);
-    assert!(removed.iter().any(|r| r.contains("renodx-dlss5.addon64")), "Cleaned files must include renodx-dlss5.addon64: {:?}", removed);
+    assert!(removed.iter().any(|r| r.contains("renodx-dlss.addon64")), "Cleaned files must include renodx-dlss.addon64: {:?}", removed);
     assert!(removed.iter().any(|r| r.contains("renodx-mfgunlock.addon64")), "Cleaned files must include renodx-mfgunlock.addon64: {:?}", removed);
 
     assert!(!bin_dir.join("dxgi.dll").exists(), "dxgi.dll must be purged from bin/x64");
-    assert!(!bin_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be purged from bin/x64");
+    assert!(!bin_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be purged from bin/x64");
     assert!(!bin_dir.join("renodx-mfgunlock.addon64").exists(), "renodx-mfgunlock.addon64 must be purged from bin/x64");
     assert!(!bin_dir.join("ReShade.ini").exists(), "ReShade.ini must be purged from bin/x64");
     assert!(bin_dir.join("CyberGame.exe").exists(), "Original game executable must not be deleted");
@@ -681,6 +681,7 @@ fn test_optiscaler_route_deploys_expected_files_and_strictly_excludes_reshade() 
     // 2. Strict Negative assertions: ZERO ReShade or add-on files allowed
     assert!(!bin_dir.join("ReShade64.dll").exists(), "ReShade64.dll must NEVER be deployed in OptiScaler route");
     assert!(!bin_dir.join("ReShade.ini").exists(), "ReShade.ini must NEVER be deployed in OptiScaler route");
+    assert!(!bin_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must NEVER be deployed in OptiScaler route");
     assert!(!bin_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must NEVER be deployed in OptiScaler route");
     assert!(!bin_dir.join("renodx-mfgunlock.addon64").exists(), "renodx-mfgunlock.addon64 must NEVER be deployed in OptiScaler route");
     assert!(!bin_dir.join("dlss5-lab-overlay.addon64").exists(), "overlay addon must NEVER be deployed in OptiScaler route");
@@ -777,9 +778,9 @@ fn test_streamline_game_deploys_version_dll_with_external_framegen() {
         "RTX40MFG-Universal.json configuration must be deployed"
     );
 
-    assert_eq!(fs::read(bin_dir.join("sl.interposer.dll")).unwrap(), b"MOCK_SL_INTERPOSER");
-    assert_eq!(fs::read(bin_dir.join("sl.common.dll")).unwrap(), b"MOCK_SL_COMMON");
-    assert_eq!(fs::read(bin_dir.join("sl.reflex.dll")).unwrap(), b"MOCK_SL_REFLEX");
+    assert_eq!(fs::read(bin_dir.join("sl.interposer.dll")).unwrap(), b"MOCK_STREAMLINE_INTERPOSER", "Native sl.interposer.dll must be preserved");
+    assert_eq!(fs::read(bin_dir.join("sl.common.dll")).unwrap(), b"MOCK_STREAMLINE_COMMON", "Native sl.common.dll must be preserved");
+    assert!(!bin_dir.join("sl.pcl.dll").exists(), "sl.pcl.dll must strictly never be deployed");
 
     let ini_content = fs::read_to_string(bin_dir.join("OptiScaler.ini")).unwrap();
     assert_eq!(get_ini(&ini_content, "FrameGen", "External"), Some("true".to_string()));
@@ -791,7 +792,6 @@ fn test_streamline_game_deploys_version_dll_with_external_framegen() {
 
     assert_eq!(fs::read(bin_dir.join("sl.interposer.dll")).unwrap(), b"MOCK_STREAMLINE_INTERPOSER");
     assert_eq!(fs::read(bin_dir.join("sl.common.dll")).unwrap(), b"MOCK_STREAMLINE_COMMON");
-    assert!(!bin_dir.join("sl.reflex.dll").exists(), "sl.reflex.dll must be wiped on restore");
     assert!(!bin_dir.join("version.dll").exists(), "version.dll must be wiped on restore");
     assert!(!bin_dir.join("OptiScaler.ini").exists(), "OptiScaler.ini must be wiped on restore");
 }
@@ -848,6 +848,177 @@ fn test_streamline_1x_game_preserves_original_files_when_deploying_optiscaler() 
 }
 
 #[test]
+fn test_streamline_modern_game_preserves_native_streamline_files() {
+    let kernel32 = std::path::Path::new(r"C:\Windows\System32\kernel32.dll");
+    if !kernel32.is_file() {
+        return;
+    }
+
+    let temp = TempDir::new("modern_sl_preserve");
+    let game_dir = temp.join("Witcher3");
+    let bin_dir = game_dir.join("bin").join("x64_dx12");
+    fs::create_dir_all(&bin_dir).unwrap();
+
+    let exe_path = bin_dir.join("witcher3.exe");
+    fs::write(&exe_path, b"DUMMY_WITCHER3_EXE").unwrap();
+
+    // Copy kernel32.dll (version >= 10.0, which satisfies >= (2, 14, 1)) as native sl.interposer.dll
+    fs::copy(kernel32, bin_dir.join("sl.interposer.dll")).unwrap();
+    fs::write(bin_dir.join("sl.common.dll"), b"NATIVE_WITCHER3_COMMON").unwrap();
+    fs::write(bin_dir.join("sl.dlss_g.dll"), b"NATIVE_WITCHER3_DLSSG").unwrap();
+    fs::write(bin_dir.join("sl.reflex.dll"), b"NATIVE_WITCHER3_REFLEX").unwrap();
+    fs::write(bin_dir.join("sl.pcl.dll"), b"NATIVE_WITCHER3_PCL").unwrap();
+
+    let payloads = create_mock_payload_bundle(&temp.join("payloads"));
+
+    let opts = DeployOptions {
+        game_name: Some("The Witcher 3: Wild Hunt".to_string()),
+        game_dir: game_dir.clone(),
+        exe_path: exe_path.clone(),
+        api: "DirectX 12".to_string(),
+        pre_sr: true,
+        passes: 1,
+        mfg_unlock: true,
+        mfg_multiplier: 4,
+        nr_style: 0,
+        nr_style_enabled: false,
+    };
+
+    let res = deploy_optiscaler_with_bundle(&opts, &payloads).expect("deploy must succeed");
+    assert!(res.success);
+
+    // Verify OptiScaler files were deployed
+    assert!(bin_dir.join("dxgi.dll").exists(), "OptiScaler dxgi.dll must be deployed");
+    assert!(bin_dir.join("OptiScaler.ini").exists(), "OptiScaler.ini must be deployed");
+
+    // CRITICAL: Native Streamline files MUST BE PRESERVED and NOT overwritten!
+    let current_sl_interposer = fs::read(bin_dir.join("sl.interposer.dll")).unwrap();
+    let original_sl_interposer = fs::read(kernel32).unwrap();
+    assert_eq!(current_sl_interposer, original_sl_interposer, "Native sl.interposer.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.common.dll")).unwrap(), b"NATIVE_WITCHER3_COMMON", "Native sl.common.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.dlss_g.dll")).unwrap(), b"NATIVE_WITCHER3_DLSSG", "Native sl.dlss_g.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.reflex.dll")).unwrap(), b"NATIVE_WITCHER3_REFLEX", "Native sl.reflex.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.pcl.dll")).unwrap(), b"NATIVE_WITCHER3_PCL", "Native sl.pcl.dll must NOT be deleted or overwritten");
+
+    // Verify log records preservation
+    assert!(
+        res.log_lines.iter().any(|l| l.contains("preserving native runtime")),
+        "Log must record that native Streamline was preserved"
+    );
+}
+
+#[test]
+fn test_streamline_control_resonant_v2_12_preserves_native_streamline_files() {
+    let temp = TempDir::new("control_resonant_sl_preserve");
+    let game_dir = temp.join("Remedy.CONTROLResonant_1.4.2.0_x64__a0f1gph4eb81p");
+    let bin_dir = game_dir.clone();
+    fs::create_dir_all(&bin_dir).unwrap();
+
+    let exe_path = bin_dir.join("CONTROLResonant.exe");
+    fs::write(&exe_path, b"DUMMY_CONTROL_EXE").unwrap();
+
+    // Mock native Control Resonant Streamline 2.12.130.0 files
+    let native_interposer = b"CONTROL_RESONANT_NATIVE_SL_INTERPOSER_2_12";
+    let native_common = b"CONTROL_RESONANT_NATIVE_SL_COMMON_2_12";
+    let native_dlss_g = b"CONTROL_RESONANT_NATIVE_SL_DLSS_G_2_12";
+    let native_reflex = b"CONTROL_RESONANT_NATIVE_SL_REFLEX_2_12";
+    let native_dlss = b"CONTROL_RESONANT_NATIVE_SL_DLSS_2_12";
+    let native_dlss_d = b"CONTROL_RESONANT_NATIVE_SL_DLSS_D_2_12";
+    let native_pcl = b"CONTROL_RESONANT_NATIVE_SL_PCL_2_12";
+
+    fs::write(bin_dir.join("sl.interposer.dll"), native_interposer).unwrap();
+    fs::write(bin_dir.join("sl.common.dll"), native_common).unwrap();
+    fs::write(bin_dir.join("sl.dlss_g.dll"), native_dlss_g).unwrap();
+    fs::write(bin_dir.join("sl.reflex.dll"), native_reflex).unwrap();
+    fs::write(bin_dir.join("sl.dlss.dll"), native_dlss).unwrap();
+    fs::write(bin_dir.join("sl.dlss_d.dll"), native_dlss_d).unwrap();
+    fs::write(bin_dir.join("sl.pcl.dll"), native_pcl).unwrap();
+
+    let payloads = create_mock_payload_bundle(&temp.join("payloads"));
+
+    let opts = DeployOptions {
+        game_name: Some("CONTROL Resonant".to_string()),
+        game_dir: game_dir.clone(),
+        exe_path: exe_path.clone(),
+        api: "DirectX 12".to_string(),
+        pre_sr: true,
+        passes: 1,
+        mfg_unlock: true,
+        mfg_multiplier: 4,
+        nr_style: 0,
+        nr_style_enabled: false,
+    };
+
+    let res = deploy_optiscaler_with_bundle(&opts, &payloads).expect("deploy must succeed");
+    assert!(res.success);
+
+    // Verify OptiScaler files were deployed
+    assert!(bin_dir.join("dxgi.dll").exists(), "OptiScaler dxgi.dll must be deployed");
+    assert!(bin_dir.join("OptiScaler.ini").exists(), "OptiScaler.ini must be deployed");
+
+    // CRITICAL: ALL native Streamline files MUST BE PRESERVED and NOT overwritten!
+    assert_eq!(fs::read(bin_dir.join("sl.interposer.dll")).unwrap(), native_interposer, "Native sl.interposer.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.common.dll")).unwrap(), native_common, "Native sl.common.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.dlss_g.dll")).unwrap(), native_dlss_g, "Native sl.dlss_g.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.reflex.dll")).unwrap(), native_reflex, "Native sl.reflex.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.dlss.dll")).unwrap(), native_dlss, "Native sl.dlss.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.dlss_d.dll")).unwrap(), native_dlss_d, "Native sl.dlss_d.dll must NOT be overwritten");
+    assert_eq!(fs::read(bin_dir.join("sl.pcl.dll")).unwrap(), native_pcl, "Native sl.pcl.dll must NOT be overwritten");
+
+    // Manifest must NOT track native Streamline files in replaced
+    let manifest = dlss_studio::core::journal::read_manifest(&game_dir).expect("manifest must exist");
+    assert!(!manifest.replaced.iter().any(|r| r.rel == "sl.interposer.dll"), "sl.interposer.dll must not be in replaced");
+    assert!(!manifest.replaced.iter().any(|r| r.rel == "sl.common.dll"), "sl.common.dll must not be in replaced");
+    assert!(!manifest.replaced.iter().any(|r| r.rel == "sl.dlss_g.dll"), "sl.dlss_g.dll must not be in replaced");
+    assert!(!manifest.replaced.iter().any(|r| r.rel == "sl.reflex.dll"), "sl.reflex.dll must not be in replaced");
+
+    // Verify log records preservation
+    assert!(
+        res.log_lines.iter().any(|l| l.contains("preserving native runtime")),
+        "Log must record that native Streamline was preserved"
+    );
+}
+
+#[test]
+fn test_optiscaler_strictly_never_deploys_sl_pcl_dll() {
+    let temp = TempDir::new("opti_no_sl_pcl");
+    let game_dir = temp.join("TestGame");
+    let bin_dir = game_dir.clone();
+    fs::create_dir_all(&bin_dir).unwrap();
+
+    let exe_path = bin_dir.join("game.exe");
+    fs::write(&exe_path, b"DUMMY_EXE").unwrap();
+
+    // Pre-existing vanilla sl.pcl.dll in game folder
+    fs::write(bin_dir.join("sl.pcl.dll"), b"VANILLA_PCL_DLL").unwrap();
+
+    let payloads = create_mock_payload_bundle(&temp.join("payloads"));
+    // Ensure mock streamline has sl.pcl.dll in payloads
+    fs::write(payloads.streamline_dir.as_ref().unwrap().join("sl.pcl.dll"), b"MOCK_PCL_IN_PAYLOADS").unwrap();
+
+    let opts = DeployOptions {
+        game_name: Some("Test Game".to_string()),
+        game_dir: game_dir.clone(),
+        exe_path: exe_path.clone(),
+        api: "DirectX 12".to_string(),
+        pre_sr: true,
+        passes: 1,
+        mfg_unlock: true,
+        mfg_multiplier: 4,
+        nr_style: 0,
+        nr_style_enabled: false,
+    };
+
+    let res = deploy_optiscaler_with_bundle(&opts, &payloads).expect("deploy must succeed");
+    assert!(res.success);
+
+    // CRITICAL: pre-existing game sl.pcl.dll must be preserved, and sl.pcl.dll must NEVER be deployed to OptiScaler/streamline
+    assert_eq!(fs::read(bin_dir.join("sl.pcl.dll")).unwrap(), b"VANILLA_PCL_DLL", "Pre-existing game sl.pcl.dll must be preserved!");
+    assert!(!bin_dir.join("OptiScaler").join("streamline").join("sl.pcl.dll").exists(), "sl.pcl.dll must NOT be deployed to OptiScaler/streamline");
+}
+
+
+#[test]
 fn test_reshade_route_deploys_expected_files_and_strictly_excludes_optiscaler() {
     let _state_lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp = TempDir::new("pure_reshade");
@@ -876,7 +1047,7 @@ fn test_reshade_route_deploys_expected_files_and_strictly_excludes_optiscaler() 
     assert!(res.success);
 
     assert!(game_dir.join("dxgi.dll").exists(), "ReShade dxgi.dll must be deployed");
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed");
     assert!(game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must be deployed for RenoDX DLSS 5 Neural Rendering");
     assert!(game_dir.join("renodx-mfgunlock.addon64").exists(), "renodx-mfgunlock.addon64 must be deployed");
     assert!(game_dir.join("ReShade.ini").exists(), "ReShade.ini must be deployed");
@@ -949,7 +1120,7 @@ fn test_feeder_route_deploys_only_feeder_and_strictly_excludes_mfg_and_presr() {
     assert!(game_dir.join("dxgi.dll").exists(), "ReShade dxgi.dll must be deployed");
     assert!(game_dir.join("ReShade.ini").exists(), "ReShade.ini must be deployed");
     assert!(game_dir.join("dlss5-feed.addon64").exists(), "dlss5-feed.addon64 must be deployed");
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed for neural rendering");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed for neural rendering");
     assert!(game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must be deployed for neural rendering");
     assert!(game_dir.join("nvngx_dlss.dll").exists(), "nvngx_dlss.dll must be deployed for Streamline Feeder Super Sampling");
     assert!(game_dir.join("reshade-shaders").join("Shaders").join("DrawText.fxh").exists(), "DrawText.fxh must be deployed");
@@ -991,7 +1162,7 @@ fn test_feeder_route_deploys_mfg_and_dlssnr_when_mfg_unlock_enabled() {
 
     assert!(game_dir.join("dxgi.dll").exists(), "ReShade dxgi.dll must be deployed");
     assert!(game_dir.join("renodx-mfgunlock.addon64").exists(), "renodx-mfgunlock.addon64 must be deployed on Feeder with MFG");
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed on Feeder with MFG");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed on Feeder with MFG");
     assert!(game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must be deployed on Feeder with MFG");
     assert!(game_dir.join("ReShade.ini").exists(), "ReShade.ini must be deployed");
 
@@ -1036,7 +1207,7 @@ fn test_feeder_route_dx11_configures_preset_root_and_enables_mfg() {
 
     assert!(game_dir.join("dxgi.dll").exists(), "ReShade dxgi.dll must be deployed for DX11");
     assert!(game_dir.join("dlss5-feed.addon64").exists(), "dlss5-feed.addon64 must be deployed for DX11");
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed for DX11");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed for DX11");
     assert!(game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must be deployed for DX11");
     assert!(game_dir.join("nvngx_dlss.dll").exists(), "nvngx_dlss.dll must be deployed for DX11");
     assert!(game_dir.join("ReShade.ini").exists(), "ReShade.ini must be deployed for DX11");
@@ -1177,7 +1348,7 @@ fn test_switching_routes_cleans_previous_artifacts() {
     };
     deploy_native_dlss5_with_bundle(&reshade_opts, &payloads).unwrap();
 
-    assert!(game_dir.join("renodx-dlss5.addon64").exists());
+    assert!(game_dir.join("renodx-dlss.addon64").exists());
     assert!(game_dir.join("ReShade.ini").exists());
     assert!(!game_dir.join("OptiScaler.ini").exists());
     assert!(!game_dir.join("version.dll").exists());
@@ -1232,9 +1403,15 @@ fn test_generate_optiscaler_ini_all_combinations() {
 
     let res_a = generate_optiscaler_ini(base, true, 3, true, Some("CyberGame.exe"), 2, Some("DirectX 12"), 4);
     assert_eq!(get_ini(&res_a, "DlssNr", "Enabled"), Some("true".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "PreSr"), Some("true".to_string()));
     assert_eq!(get_ini(&res_a, "DlssNr", "RunBeforeSR"), Some("true".to_string()));
     assert_eq!(get_ini(&res_a, "DlssNr", "Passes"), Some("3".to_string()));
     assert_eq!(get_ini(&res_a, "DlssNr", "ApplyAfterRR"), Some("true".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "CacheEnabled"), Some("true".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "CacheInterval"), Some("2".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "CacheAntiPop"), Some("true".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "WhitePointSource"), Some("3".to_string()));
+    assert_eq!(get_ini(&res_a, "DlssNr", "NoiseAware"), Some("true".to_string()));
     assert_eq!(get_ini(&res_a, "DlssNr", "Style"), Some("2".to_string()));
     assert_eq!(get_ini(&res_a, "Plugins", "LoadReshade"), Some("false".to_string()));
     assert_eq!(get_ini(&res_a, "FrameGen", "External"), Some("true".to_string()));
@@ -1254,6 +1431,7 @@ fn test_generate_optiscaler_ini_all_combinations() {
 
     let res_b = generate_optiscaler_ini(base, false, 1, false, None, 0, None, 4);
     assert_eq!(get_ini(&res_b, "DlssNr", "Enabled"), Some("false".to_string()));
+    assert_eq!(get_ini(&res_b, "DlssNr", "PreSr"), Some("false".to_string()));
     assert_eq!(get_ini(&res_b, "DlssNr", "RunBeforeSR"), Some("false".to_string()));
     assert_eq!(get_ini(&res_b, "DlssNr", "Passes"), Some("1".to_string()));
     assert_eq!(get_ini(&res_b, "Plugins", "LoadReshade"), Some("false".to_string()));
@@ -1294,8 +1472,12 @@ fn test_dynamic_optiscaler_payload_scoring_prioritizes_rtx40_mfg_and_latest_vers
     let score_rtx40_084 = score_optiscaler_dir("OptiScaler-NR-v0.8.4-rtx40-mfg");
     let score_base_085 = score_optiscaler_dir("OptiScaler-0.8.5-dlssnr");
     let score_base_084 = score_optiscaler_dir("OptiScaler-0.8.4-dlssnr");
+    let score_v121_dlss5 = score_optiscaler_dir("OptiScaler-1.2.1-dlss5");
 
-    // rtx40-mfg builds must score higher than base builds
+    // Modern v1.x.x DLSS 5 build must score strictly higher than legacy v0.8.x builds
+    assert!(score_v121_dlss5 > score_rtx40_085, "v1.2.1 DLSS 5 must score higher than v0.8.5 rtx40-mfg");
+
+    // rtx40-mfg builds must score higher than base builds within same 0.x tier
     assert!(score_rtx40_085 > score_base_085, "rtx40-mfg builds must have priority over base builds");
     assert!(score_rtx40_084 > score_base_084, "rtx40-mfg builds must have priority over base builds");
 
@@ -1694,12 +1876,12 @@ fn test_feeder_route_32bit_deploys_dgvoodoo_and_host64_bridge() {
     assert_eq!(fs::read(host64_dir.join("dlss5-feed-host64.exe")).unwrap(), b"MOCK_FEEDER_HOST64_EXE");
     assert!(host64_dir.join("dxgi.dll").exists(), "host64/dxgi.dll (ReShade64) must exist");
     assert_eq!(fs::read(host64_dir.join("dxgi.dll")).unwrap(), b"MOCK_RESHADE_PE_BYTES");
-    assert!(host64_dir.join("renodx-dlss5.addon64").exists(), "host64/renodx-dlss5.addon64 must exist");
+    assert!(host64_dir.join("renodx-dlss.addon64").exists(), "host64/renodx-dlss.addon64 must exist");
     assert!(host64_dir.join("nvngx_dlssnr.dll").exists(), "host64/nvngx_dlssnr.dll must exist");
     assert!(host64_dir.join("nvngx_dlss.dll").exists(), "host64/nvngx_dlss.dll must exist");
     assert!(host64_dir.join("ReShade.ini").exists(), "host64/ReShade.ini must exist");
 
-    assert!(!game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must NOT be in 32-bit game root");
+    assert!(!game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must NOT be in 32-bit game root");
     assert!(!game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must NOT be in 32-bit game root");
     assert!(dlss_studio::core::pe::is_large_address_aware(&exe_path), "Target 32-bit executable must be patched with LAA (4GB patch)");
 
@@ -1792,7 +1974,7 @@ fn test_feeder_route_64bit_deploys_reshade64_and_addon64() {
     assert_eq!(fs::read(&dxgi_path).unwrap(), b"MOCK_RESHADE_PE_BYTES", "dxgi.dll must be ReShade64.dll");
 
     assert!(game_dir.join("dlss5-feed.addon64").exists(), "dlss5-feed.addon64 must be deployed for 64-bit process");
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed in 64-bit game");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed in 64-bit game");
     assert!(game_dir.join("nvngx_dlssnr.dll").exists(), "nvngx_dlssnr.dll must be deployed in 64-bit game");
     assert!(game_dir.join("nvngx_dlss.dll").exists(), "nvngx_dlss.dll must be deployed in 64-bit game");
 
@@ -1924,12 +2106,12 @@ fn test_native_dlss5_deploys_renodx_addon_and_cleans_conflicting_older_addons() 
     // Pre-populate game folder with conflicting older addons
     let stale_nr = game_dir.join("dlss-nr.addon64");
     fs::write(&stale_nr, b"OLD_STALE_NR").unwrap();
-    let stale_dlss = game_dir.join("renodx-dlss.addon64");
-    fs::write(&stale_dlss, b"OLD_STALE_DLSS").unwrap();
+    let stale_dlss5 = game_dir.join("renodx-dlss5.addon64");
+    fs::write(&stale_dlss5, b"OLD_STALE_DLSS5").unwrap();
 
     let mut payloads = create_mock_payload_bundle(&temp.join("payloads"));
-    let renodx_addon = temp.join("payloads").join("renodx-dlss5.addon64");
-    fs::write(&renodx_addon, b"MOCK_RENODX_DLSS5_ADDON").unwrap();
+    let renodx_addon = temp.join("payloads").join("renodx-dlss.addon64");
+    fs::write(&renodx_addon, b"MOCK_RENODX_DLSS_ADDON").unwrap();
     payloads.renodx_dlss5_addon = Some(renodx_addon);
 
     let native_opts = DeployOptions {
@@ -1948,12 +2130,12 @@ fn test_native_dlss5_deploys_renodx_addon_and_cleans_conflicting_older_addons() 
     let res = deploy_native_dlss5_with_bundle(&native_opts, &payloads).expect("deploy must succeed");
     assert!(res.success);
 
-    // renodx-dlss5.addon64 must be deployed
-    assert!(game_dir.join("renodx-dlss5.addon64").is_file(), "renodx-dlss5.addon64 must be deployed");
+    // renodx-dlss.addon64 must be deployed
+    assert!(game_dir.join("renodx-dlss.addon64").is_file(), "renodx-dlss.addon64 must be deployed");
 
     // Conflicting older/prototype addons must be automatically cleaned up
     assert!(!game_dir.join("dlss-nr.addon64").exists(), "Stale dlss-nr.addon64 must be cleaned up");
-    assert!(!game_dir.join("renodx-dlss.addon64").exists(), "Stale renodx-dlss.addon64 must be cleaned up");
+    assert!(!game_dir.join("renodx-dlss5.addon64").exists(), "Stale renodx-dlss5.addon64 must be cleaned up");
 }
 
 #[test]
@@ -2038,7 +2220,7 @@ fn test_dlss5_d3d12_fix_deployed_with_native_route_and_cleaned_on_restore() {
     let res = deploy_native_dlss5_with_bundle(&opts, &payloads).expect("deploy_native_dlss5_with_bundle must succeed");
     assert!(res.success);
 
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed");
     assert!(game_dir.join("dlss-mip-fix.addon64").exists(), "dlss-mip-fix.addon64 must be deployed as companion");
 
     fs::write(game_dir.join("dlss-mip-fix.cfg"), b"fix=1\n").unwrap();
@@ -2050,7 +2232,7 @@ fn test_dlss5_d3d12_fix_deployed_with_native_route_and_cleaned_on_restore() {
     assert!(!game_dir.join("dlss-mip-fix.addon64").exists(), "dlss-mip-fix.addon64 must be removed on restore");
     assert!(!game_dir.join("dlss-mip-fix.cfg").exists(), "dlss-mip-fix.cfg must be removed on restore");
     assert!(!game_dir.join("dlss-mip-fix.log").exists(), "dlss-mip-fix.log must be removed on restore");
-    assert!(!game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be removed on restore");
+    assert!(!game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be removed on restore");
 }
 
 #[test]
@@ -2081,7 +2263,7 @@ fn test_dlss5_d3d12_fix_deployed_with_feeder_route() {
     let res = deploy_feeder_with_bundle(&opts, &payloads).expect("deploy_feeder_with_bundle must succeed");
     assert!(res.success);
 
-    assert!(game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must be deployed");
+    assert!(game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must be deployed");
     assert!(game_dir.join("dlss-mip-fix.addon64").exists(), "dlss-mip-fix.addon64 must be deployed in Feeder route");
 }
 
@@ -2136,6 +2318,7 @@ fn test_hot_swap_removes_dlss5_d3d12_fix_when_switching_to_optiscaler() {
     assert!(!game_dir.join("dlss-mip-fix.addon64").exists(), "dlss-mip-fix.addon64 must NOT exist in OptiScaler route");
     assert!(!game_dir.join("dlss-mip-fix.cfg").exists(), "dlss-mip-fix.cfg must NOT exist in OptiScaler route");
     assert!(!game_dir.join("dlss-mip-fix.log").exists(), "dlss-mip-fix.log must NOT exist in OptiScaler route");
+    assert!(!game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 must NOT exist in OptiScaler route");
     assert!(!game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 must NOT exist in OptiScaler route");
 }
 
@@ -2190,38 +2373,9 @@ fn test_backup_dir_ancestor_resolution() {
 }
 
 #[test]
-fn test_retroactive_backfill_added_history() {
-    let temp = TempDir::new("backfill_test");
-    let game_dir = temp.join("GameDir");
-    let bdir = game_dir.join("_DLSS5_Backup");
-    fs::create_dir_all(&bdir).unwrap();
-
-    let mut m1 = dlss_studio::core::journal::ActiveManifest::default();
-    m1.added = vec!["file_a.dll".to_string(), "file_b.dll".to_string()];
-    fs::write(bdir.join("manifest.json.done-100"), serde_json::to_vec(&m1).unwrap()).unwrap();
-
-    let mut m2 = dlss_studio::core::journal::ActiveManifest::default();
-    m2.added = vec!["nvngx_dlss.dll".to_string()];
-    fs::write(bdir.join("manifest.json.done-200"), serde_json::to_vec(&m2).unwrap()).unwrap();
-
-    let mut m3 = dlss_studio::core::journal::ActiveManifest::default();
-    m3.added = vec!["file_c.dll".to_string()];
-    fs::write(bdir.join("manifest.json.done-300"), serde_json::to_vec(&m3).unwrap()).unwrap();
-
-    assert!(!bdir.join("added_history.json").exists(), "added_history.json must not exist initially");
-
-    let history = dlss_studio::core::journal::read_or_backfill_added_history(&game_dir);
-    assert!(bdir.join("added_history.json").exists(), "added_history.json must be persisted after backfill");
-    assert!(history.files.contains("file_a.dll"));
-    assert!(history.files.contains("file_b.dll"));
-    assert!(history.files.contains("nvngx_dlss.dll"));
-    assert!(history.files.contains("file_c.dll"));
-}
-
-#[test]
-fn test_cumulative_added_history_multi_cycle_swap_and_prune() {
+fn test_multi_cycle_swap_and_pristine_restore() {
     let _state_lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let temp = TempDir::new("cumulative_cycle_test");
+    let temp = TempDir::new("multi_cycle_test");
     let game_dir = temp.join("GameDir");
     fs::create_dir_all(&game_dir).unwrap();
 
@@ -2249,9 +2403,9 @@ fn test_cumulative_added_history_multi_cycle_swap_and_prune() {
     };
     let res1 = deploy_native_dlss5_with_bundle(&native_opts, &payloads).expect("deploy native");
     assert!(res1.success);
-    assert!(game_dir.join("renodx-dlss5.addon64").exists());
+    assert!(game_dir.join("renodx-dlss.addon64").exists());
 
-    // Cycle 2: Feeder route (adds nvngx_dlss.dll)
+    // Cycle 2: Feeder route (swaps and cleans conflicting native artifacts)
     let feeder_opts = DeployOptions {
         game_name: Some("MultiCycle Game".to_string()),
         game_dir: game_dir.clone(),
@@ -2284,59 +2438,31 @@ fn test_cumulative_added_history_multi_cycle_swap_and_prune() {
     let res3 = deploy_optiscaler_with_bundle(&opti_opts, &payloads).expect("deploy optiscaler");
     assert!(res3.success);
 
-    // Cycles 4..10: Simulate 7 additional swaps/deployments, exceeding the 5-manifest prune limit
     let bdir = game_dir.join("_DLSS5_Backup");
-    for i in 4..=10 {
-        let mut sim_manifest = dlss_studio::core::journal::ActiveManifest::default();
-        sim_manifest.route = format!("variant_{}", i);
-        let extra_file = format!("extra_mod_{}.dll", i);
-        fs::write(game_dir.join(&extra_file), b"SIMULATED_MOD").unwrap();
-        sim_manifest.added = vec![extra_file];
+    assert!(bdir.join("manifest.json").exists(), "Active manifest must exist while mod is deployed");
 
-        // Archive previous manifest if exists, carrying forward genuine replaced backups
-        let mpath = bdir.join("manifest.json");
-        if mpath.exists() {
-            if let Some(prev) = dlss_studio::core::journal::read_manifest(&game_dir) {
-                sim_manifest.replaced = prev.replaced;
-                sim_manifest.backup_prefix = prev.backup_prefix;
-            }
-            let done_path = bdir.join(format!("manifest.json.done-1000{}", i));
-            let _ = fs::rename(&mpath, done_path);
-        }
-        dlss_studio::core::journal::save_manifest(&game_dir, &sim_manifest).unwrap();
-    }
-
-    // Assert pruning happened: only top 5 done manifests exist
+    // Zero historical done manifests or added_history files must be produced
     let done_count = fs::read_dir(&bdir).unwrap()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_name().to_string_lossy().starts_with("manifest.json.done-"))
         .count();
-    assert_eq!(done_count, 5, "Only 5 done manifests should be retained after pruning");
+    assert_eq!(done_count, 0, "No done manifests should ever be produced");
+    assert!(!bdir.join("added_history.json").exists(), "added_history.json should never be created");
 
-    // But cumulative added_history.json still remembers ALL files from cycles 1 and 2!
-    let history = dlss_studio::core::journal::read_added_history(&game_dir).expect("added_history.json must exist");
-    assert!(history.files.contains("renodx-dlss5.addon64"), "History must retain cycle 1 files");
-    assert!(history.files.contains("nvngx_dlss.dll"), "History must retain cycle 2 nvngx_dlss.dll");
-    assert!(history.files.contains("extra_mod_4.dll"), "History must retain cycle 4 files");
-    assert!(history.files.contains("extra_mod_10.dll"), "History must retain cycle 10 files");
-
-    // Now execute restore_game - it must clean 100% of all added files across all 10 cycles
+    // Now execute restore_game - it must clean 100% of all added files and restore genuine dxgi.dll
     let restored = dlss_studio::core::journal::restore_game(&game_dir).expect("restore_game");
     assert!(restored);
 
-    // Assert zero leftover files!
-    assert!(!game_dir.join("nvngx_dlss.dll").exists(), "nvngx_dlss.dll from cycle 2 MUST be purged");
-    assert!(!game_dir.join("renodx-dlss5.addon64").exists(), "renodx-dlss5.addon64 from cycle 1 MUST be purged");
-    for i in 4..=10 {
-        let extra_file = format!("extra_mod_{}.dll", i);
-        assert!(!game_dir.join(&extra_file).exists(), "{} must be purged on restore", extra_file);
-    }
+    // Assert zero leftover mod files!
+    assert!(!game_dir.join("nvngx_dlss.dll").exists(), "nvngx_dlss.dll MUST be purged");
+    assert!(!game_dir.join("renodx-dlss.addon64").exists(), "renodx-dlss.addon64 MUST be purged");
+    assert!(!game_dir.join("OptiScaler.dll").exists(), "OptiScaler.dll MUST be purged");
 
-    // Genuine original dxgi.dll must be intact!
+    // Genuine original dxgi.dll must be restored byte-for-byte!
     let dxgi_bytes = fs::read(&original_dxgi).expect("original dxgi.dll must exist");
-    assert_eq!(dxgi_bytes, b"GENUINE_GAME_DXGI", "Original dxgi.dll must be restored");
+    assert_eq!(dxgi_bytes, b"GENUINE_GAME_DXGI", "Original dxgi.dll must be restored byte-identical");
 
-    // added_history.json must be archived
-    assert!(!bdir.join("added_history.json").exists(), "added_history.json must be archived on restore");
+    // Backup directory must be cleanly deleted on restore (pristine game directory)
+    assert!(!bdir.exists(), "_DLSS5_Backup must be completely removed on restore");
 }
 

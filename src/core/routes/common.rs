@@ -64,6 +64,7 @@ pub fn is_known_mod_file(dest: &Path) -> bool {
         || name == "dlss5-feed-host64.exe"
         || name == "dlss-overlay.addon64"
         || name == "dlss5-lab-overlay.addon64"
+        || name == "renodx-dlss.addon64"
         || name == "renodx-dlss5.addon64"
         || name == "dlss-mip-fix.addon64"
         || name == "dlss-mip-fix.cfg"
@@ -76,7 +77,6 @@ pub fn is_known_mod_file(dest: &Path) -> bool {
         || name == "dgvoodoo.log"
         || name == "rtxmfg-universal.json"
         || name == "rtx40mfg-universal.json"
-        || name == "sl.pcl.dll"
         || name.starts_with("rtxmfg-")
         || name.ends_with(".addon64")
         || name.ends_with(".addon32")
@@ -221,6 +221,7 @@ pub fn clean_conflicting_route_artifacts(
                             || lower == "dlss5-feed-host64.exe"
                             || lower == "dlss-overlay.addon64"
                             || lower == "dlss5-lab-overlay.addon64"
+                            || lower == "renodx-dlss.addon64"
                             || lower == "renodx-dlss5.addon64"
                             || lower == "dlss-mip-fix.addon64"
                             || lower == "dlss-mip-fix.cfg"
@@ -379,6 +380,20 @@ pub fn carry_forward_existing_backups(
                 }
             }
         }
+
+        // Carry forward added files and directories introduced by DLSS Studio across routes
+        for item in prev.added {
+            let target = crate::core::journal::resolve_target_path(game_dir, &item);
+            if target.exists() && !manifest.added.contains(&item) && !manifest.replaced.iter().any(|r| r.rel == item) {
+                manifest.added.push(item);
+            }
+        }
+        for dir in prev.added_dirs {
+            let target = crate::core::journal::resolve_target_path(game_dir, &dir);
+            if target.exists() && !manifest.added_dirs.contains(&dir) {
+                manifest.added_dirs.push(dir);
+            }
+        }
     }
 }
 
@@ -406,38 +421,42 @@ pub fn track_and_copy(
         .unwrap_or_else(|_| dest.file_name().unwrap_or_default().to_string_lossy().to_string());
 
     if dest.exists() {
-        let is_same_as_src = if let (Ok(d_meta), Ok(s_meta)) = (dest.metadata(), src.metadata()) {
-            if d_meta.len() == s_meta.len() {
-                fs::read(dest).ok() == fs::read(src).ok()
-            } else {
-                false
-            }
+        let is_same = if let (Ok(dest_bytes), Ok(src_bytes)) = (fs::read(dest), fs::read(src)) {
+            dest_bytes == src_bytes
         } else {
             false
         };
 
-        let was_previously_added = if let Some(prev) = crate::core::journal::read_manifest(game_dir) {
-            prev.added.contains(&rel)
-        } else {
-            false
-        };
+        if is_same {
+            // Byte-identical: file is already present with target content.
+            // Do not copy, do not mark as added, do not mark as replaced.
+            return Ok(());
+        }
 
-        if is_known_mod_file(dest) || is_same_as_src || was_previously_added {
+        let is_mod_artifact = is_known_mod_file(dest);
+
+        if is_mod_artifact {
             if !manifest.added.contains(&rel) && !manifest.replaced.iter().any(|r| r.rel == rel) {
                 manifest.added.push(rel.clone());
             }
-        } else if !manifest.added.contains(&rel) && !manifest.replaced.iter().any(|r| r.rel == rel) {
+        } else {
             let backup_dest = backup_dir.join(&rel);
-            if let Some(p) = backup_dest.parent() {
-                fs::create_dir_all(p)?;
+            if !backup_dest.exists() {
+                if let Some(p) = backup_dest.parent() {
+                    fs::create_dir_all(p)?;
+                }
+                let _ = fs::copy(dest, &backup_dest);
+                crate::core::logger::info("deploy", &format!("Backed up original file: {} -> {}", dest.display(), backup_dest.display()));
+                log.push(format!("@{{log_backup_saved|{}}}", rel));
             }
-            let _ = fs::copy(dest, &backup_dest);
-            manifest.replaced.push(ManifestItem {
-                rel: rel.clone(),
-                old_hash: None,
-                kind: Some(kind.to_string()),
-            });
-            log.push(format!("@{{log_backup_saved|{}}}", rel));
+            if !manifest.replaced.iter().any(|r| r.rel == rel) {
+                manifest.replaced.push(ManifestItem {
+                    rel: rel.clone(),
+                    old_hash: None,
+                    kind: Some(kind.to_string()),
+                });
+            }
+            manifest.added.retain(|a| a != &rel);
         }
     } else {
         if !manifest.added.contains(&rel) && !manifest.replaced.iter().any(|r| r.rel == rel) {
@@ -446,6 +465,7 @@ pub fn track_and_copy(
     }
 
     fs::copy(src, dest)?;
+    crate::core::logger::info("deploy", &format!("Deployed file: {} -> {}", src.display(), dest.display()));
     log.push(format!("@{{log_copy_deployed|{}}}", rel));
     Ok(())
 }
@@ -484,6 +504,7 @@ pub fn track_and_write(
                 fs::create_dir_all(p)?;
             }
             let _ = fs::copy(dest, &backup_dest);
+            crate::core::logger::info("deploy", &format!("Backed up original file: {} -> {}", dest.display(), backup_dest.display()));
             manifest.replaced.push(ManifestItem {
                 rel: rel.clone(),
                 old_hash: None,
@@ -498,6 +519,7 @@ pub fn track_and_write(
     }
 
     fs::write(dest, content)?;
+    crate::core::logger::info("deploy", &format!("Wrote configuration file: {}", dest.display()));
     log.push(format!("@{{log_config_written|{}}}", rel));
     Ok(())
 }

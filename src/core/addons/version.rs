@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use super::cache::{get_components_root, is_addon_cached};
-use super::catalog::resolve_github_latest_asset;
+use super::catalog::{resolve_github_latest_asset, RENODX_DLSS_SHA256, RENODX_DLSS_URL};
 use super::{AddonId, ALL_REFERENCED_ADDONS};
 use crate::core::pe::inspect_pe;
 
@@ -41,24 +41,43 @@ pub struct ComponentsVersionManifest {
     pub last_checked: Option<u64>,
 }
 
-fn manifest_path() -> PathBuf {
-    get_components_root().join("components_version.json")
+fn manifest_paths() -> Vec<PathBuf> {
+    let mut paths = vec![get_components_root().join("components_version.json")];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            paths.push(parent.join("components").join("components_version.json"));
+            paths.push(parent.join("data").join("components").join("components_version.json"));
+        }
+    }
+    paths
 }
 
 pub fn load_version_manifest() -> ComponentsVersionManifest {
-    let p = manifest_path();
-    if p.is_file() {
-        if let Ok(data) = fs::read_to_string(&p) {
-            if let Ok(manifest) = serde_json::from_str::<ComponentsVersionManifest>(&data) {
-                return manifest;
+    for p in manifest_paths() {
+        if p.is_file() {
+            if let Ok(data) = fs::read_to_string(&p) {
+                if let Ok(manifest) = serde_json::from_str::<ComponentsVersionManifest>(&data) {
+                    if !manifest.versions.is_empty() {
+                        return manifest;
+                    }
+                }
             }
         }
     }
     ComponentsVersionManifest::default()
 }
 
+fn primary_manifest_path() -> PathBuf {
+    for p in manifest_paths() {
+        if p.is_file() {
+            return p;
+        }
+    }
+    get_components_root().join("components_version.json")
+}
+
 pub fn save_version_manifest(manifest: &ComponentsVersionManifest) -> Result<(), String> {
-    let p = manifest_path();
+    let p = primary_manifest_path();
     if let Some(parent) = p.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -103,18 +122,35 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             roots.push(parent.join("components"));
+            roots.push(parent.join("data").join("components"));
         }
     }
     for root in roots {
-        match id {
+        let detected = match id {
             AddonId::RenoDxDlss5 => {
-                let p = root.join("renodx-dlss5.addon64");
-                let p_sub = root.join("renodx-dlss5").join("renodx-dlss5.addon64");
-                let target = if p.is_file() { p } else { p_sub };
-                if let Some(pe) = inspect_pe(&target) {
-                    if let Some(v) = pe.version {
-                        return Some(format!("v{}", v.trim_start_matches('v')));
+                let candidates = [
+                    root.join("renodx-dlss").join("renodx-dlss.addon64"),
+                    root.join("renodx-dlss.addon64"),
+                    root.join("renodx-dlss5").join("renodx-dlss5.addon64"),
+                    root.join("renodx-dlss5.addon64"),
+                ];
+                let target_opt = candidates.into_iter().find(|p| p.is_file());
+                if let Some(target) = target_opt {
+                    if let Ok(hash) = crate::core::downloader::compute_sha256(&target) {
+                        if !RENODX_DLSS_SHA256.is_empty() && hash.eq_ignore_ascii_case(RENODX_DLSS_SHA256) {
+                            Some("v8.5".to_string())
+                        } else if let Some(pe) = inspect_pe(&target) {
+                            pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
+                        } else {
+                            None
+                        }
+                    } else if let Some(pe) = inspect_pe(&target) {
+                        pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
             }
             AddonId::DlssMipFix => {
@@ -122,9 +158,9 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                 let p_sub = root.join("dlss-mip-fix").join("dlss-mip-fix.addon64");
                 let target = if p.is_file() { p } else { p_sub };
                 if let Some(pe) = inspect_pe(&target) {
-                    if let Some(v) = pe.version {
-                        return Some(format!("v{}", v.trim_start_matches('v')));
-                    }
+                    pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
+                } else {
+                    None
                 }
             }
             AddonId::RenoDxMfgUnlock => {
@@ -138,7 +174,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                         }
                     }
                 }
-                if let Some(highest) = versions.into_iter().max_by(|a, b| {
+                versions.into_iter().max_by(|a, b| {
                     if is_newer_version(a, b) {
                         std::cmp::Ordering::Less
                     } else if is_newer_version(b, a) {
@@ -146,9 +182,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                     } else {
                         a.cmp(b)
                     }
-                }) {
-                    return Some(highest);
-                }
+                })
             }
             AddonId::Dlss5Feeder => {
                 let mut versions = Vec::new();
@@ -161,7 +195,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                         }
                     }
                 }
-                if let Some(highest) = versions.into_iter().max_by(|a, b| {
+                versions.into_iter().max_by(|a, b| {
                     if is_newer_version(a, b) {
                         std::cmp::Ordering::Less
                     } else if is_newer_version(b, a) {
@@ -169,9 +203,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                     } else {
                         a.cmp(b)
                     }
-                }) {
-                    return Some(highest);
-                }
+                })
             }
             AddonId::Rtx40Mfg => {
                 let mut versions = Vec::new();
@@ -184,7 +216,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                         }
                     }
                 }
-                if let Some(highest) = versions.into_iter().max_by(|a, b| {
+                versions.into_iter().max_by(|a, b| {
                     if is_newer_version(a, b) {
                         std::cmp::Ordering::Less
                     } else if is_newer_version(b, a) {
@@ -192,62 +224,135 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
                     } else {
                         a.cmp(b)
                     }
-                }) {
-                    return Some(highest);
-                }
+                })
             }
             AddonId::OptiScaler => {
-                // 1. Inspect PE headers
                 let opti_dll = root.join("OptiScaler.dll");
                 let opti_sub_dll = root.join("optiscaler").join("OptiScaler.dll");
-                let target = if opti_dll.is_file() { opti_dll } else { opti_sub_dll };
+                let opti_dlss5_dll = root.join("DLSS5-Optimised").join("OptiScaler.dll");
+                let target = if opti_dll.is_file() {
+                    opti_dll
+                } else if opti_sub_dll.is_file() {
+                    opti_sub_dll
+                } else {
+                    opti_dlss5_dll
+                };
                 if let Some(pe) = inspect_pe(&target) {
                     if let Some(v) = pe.version {
-                        return Some(format!("v{}", v.trim_start_matches('v')));
+                        Some(format!("v{}", v.trim_start_matches('v')))
+                    } else {
+                        None
                     }
-                }
-                // 2. Inspect directory entries matching OptiScaler-
-                let mut versions = Vec::new();
-                if let Ok(entries) = fs::read_dir(&root) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with("OptiScaler-") {
-                            let clean = name.trim_end_matches(".zip").trim_end_matches("-rtx40-mfg").trim_end_matches("-dlssnr");
-                            let raw_ver = clean.trim_start_matches("OptiScaler-").trim_start_matches("NR-").trim_start_matches("dlssnr-");
-                            let ver_str = if raw_ver.starts_with('v') { raw_ver.to_string() } else { format!("v{}", raw_ver) };
-                            if !ver_str.is_empty() && ver_str != "v" {
-                                versions.push(ver_str);
+                } else {
+                    let mut versions = Vec::new();
+                    if let Ok(entries) = fs::read_dir(&root) {
+                        for entry in entries.flatten() {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if name.starts_with("OptiScaler-") {
+                                let clean = name.trim_end_matches(".zip").trim_end_matches("-rtx40-mfg").trim_end_matches("-dlssnr").trim_end_matches("-dlss5");
+                                let raw_ver = clean.trim_start_matches("OptiScaler-").trim_start_matches("NR-").trim_start_matches("dlssnr-");
+                                let ver_str = if raw_ver.starts_with('v') { raw_ver.to_string() } else { format!("v{}", raw_ver) };
+                                if !ver_str.is_empty() && ver_str != "v" {
+                                    versions.push(ver_str);
+                                }
                             }
                         }
                     }
-                }
-                if let Some(highest) = versions.into_iter().max_by(|a, b| {
-                    if is_newer_version(a, b) {
-                        std::cmp::Ordering::Less
-                    } else if is_newer_version(b, a) {
-                        std::cmp::Ordering::Greater
-                    } else {
-                        a.cmp(b)
-                    }
-                }) {
-                    return Some(highest);
+                    versions.into_iter().max_by(|a, b| {
+                        if is_newer_version(a, b) {
+                            std::cmp::Ordering::Less
+                        } else if is_newer_version(b, a) {
+                            std::cmp::Ordering::Greater
+                        } else {
+                            a.cmp(b)
+                        }
+                    })
                 }
             }
-            _ => {}
+            AddonId::Streamline => {
+                let streamline_dir = root.join("streamline");
+                let alt_dir = root.join("streamline-2.14.1").join("streamline");
+                let target_dir = if streamline_dir.join("sl.interposer.dll").is_file() {
+                    streamline_dir
+                } else {
+                    alt_dir
+                };
+                let sl_dll = target_dir.join("sl.interposer.dll");
+                let nr_dll = target_dir.join("nvngx_dlssnr.dll");
+                if sl_dll.is_file() {
+                    let sl_ver = inspect_pe(&sl_dll).and_then(|pe| pe.version);
+                    let nr_ver = if nr_dll.is_file() {
+                        inspect_pe(&nr_dll).and_then(|pe| pe.version)
+                    } else {
+                        None
+                    };
+                    match (sl_ver, nr_ver) {
+                        (Some(s), Some(n)) => {
+                            let s_clean = s.trim_start_matches('v');
+                            let n_clean = n.trim_start_matches('v');
+                            Some(format!("{} (DLSS-NR {})", s_clean, n_clean))
+                        }
+                        (Some(s), None) => {
+                            Some(format!("v{}", s.trim_start_matches('v')))
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            AddonId::ReShade => {
+                let r64 = root.join("ReShade64.dll");
+                let r64_alt = root.join("reshade-vulkan").join("ReShade64.dll");
+                let target = if r64.is_file() { r64 } else { r64_alt };
+                if let Some(pe) = inspect_pe(&target) {
+                    pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
+                } else {
+                    None
+                }
+            }
+            AddonId::DgVoodoo => {
+                let d3d9 = root.join("dgvoodoo").join("x64").join("D3D9.dll");
+                let d3d9_alt = root.join("x64").join("D3D9.dll");
+                let target = if d3d9.is_file() { d3d9 } else { d3d9_alt };
+                if let Some(pe) = inspect_pe(&target) {
+                    pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(ver) = detected {
+            let _ = record_addon_version(id, &ver);
+            return Some(ver);
         }
     }
 
-    match id {
-        AddonId::RenoDxDlss5 => Some("v4.7".to_string()),
-        AddonId::DlssMipFix => Some("v1.0.0".to_string()),
-        AddonId::RenoDxMfgUnlock => Some("v1.0".to_string()),
-        AddonId::Dlss5Feeder => Some("v1.16.0-beta.3".to_string()),
-        AddonId::Rtx40Mfg => Some("v1.3.3-hotfix.2".to_string()),
-        AddonId::OptiScaler => Some("v0.8.4".to_string()),
-        AddonId::ReShade => Some("v6.8.0".to_string()),
-        AddonId::Streamline => Some("v2.14.1".to_string()),
-        AddonId::DgVoodoo => Some("v2.87.5".to_string()),
+    None
+}
+
+fn extract_compound(s: &str) -> (&str, Option<&str>) {
+    let clean = s.trim_start_matches('v').trim();
+    if let Some(open) = clean.find('(') {
+        let base = clean[..open].trim();
+        let rest = &clean[open + 1..];
+        let inner = if let Some(close) = rest.find(')') {
+            &rest[..close]
+        } else {
+            rest
+        };
+        (base, Some(inner.trim()))
+    } else {
+        (clean, None)
     }
+}
+
+fn parse_digits(s: &str) -> Vec<u64> {
+    s.split(|c: char| !c.is_ascii_digit())
+        .filter(|p| !p.is_empty())
+        .filter_map(|p| p.parse::<u64>().ok())
+        .collect()
 }
 
 pub fn is_newer_version(current: &str, latest: &str) -> bool {
@@ -257,52 +362,74 @@ pub fn is_newer_version(current: &str, latest: &str) -> bool {
         return false;
     }
 
-    let parse_parts = |s: &str| -> (Vec<u64>, String) {
-        let (num_part, suffix) = match s.find('-') {
-            Some(idx) => (&s[..idx], s[idx..].to_string()),
-            None => (s, String::new()),
-        };
-        let nums = num_part
-            .split('.')
-            .map(|p| p.parse::<u64>().unwrap_or(0))
-            .collect::<Vec<_>>();
-        (nums, suffix)
+    let cmp_nums = |c_nums: &[u64], l_nums: &[u64]| -> Option<bool> {
+        let max_len = c_nums.len().max(l_nums.len());
+        for i in 0..max_len {
+            let c_val = *c_nums.get(i).unwrap_or(&0);
+            let l_val = *l_nums.get(i).unwrap_or(&0);
+            if l_val > c_val {
+                return Some(true);
+            } else if l_val < c_val {
+                return Some(false);
+            }
+        }
+        None
     };
 
-    let (c_nums, c_suf) = parse_parts(c_clean);
-    let (l_nums, l_suf) = parse_parts(l_clean);
+    let (c_base, c_inner) = extract_compound(current);
+    let (l_base, l_inner) = extract_compound(latest);
 
-    let max_len = c_nums.len().max(l_nums.len());
-    for i in 0..max_len {
-        let c_val = *c_nums.get(i).unwrap_or(&0);
-        let l_val = *l_nums.get(i).unwrap_or(&0);
-        if l_val > c_val {
-            return true;
-        } else if l_val < c_val {
-            return false;
-        }
+    let c_base_nums = parse_digits(c_base);
+    let l_base_nums = parse_digits(l_base);
+
+    if let Some(res) = cmp_nums(&c_base_nums, &l_base_nums) {
+        return res;
     }
 
+    // Base versions are numerically equal: inspect compound qualifiers
+    if c_inner.is_none() && l_inner.is_some() {
+        return true;
+    }
+    if c_inner.is_some() && l_inner.is_none() {
+        return false;
+    }
+    if let (Some(c_in), Some(l_in)) = (c_inner, l_inner) {
+        let c_in_nums = parse_digits(c_in);
+        let l_in_nums = parse_digits(l_in);
+        if let Some(res) = cmp_nums(&c_in_nums, &l_in_nums) {
+            return res;
+        }
+        return false;
+    }
+
+    // Standard semver suffix comparison (e.g. -beta.3)
+    let parse_suffix = |s: &str| -> String {
+        match s.find('-') {
+            Some(idx) => s[idx..].to_string(),
+            None => String::new(),
+        }
+    };
+    let c_suf = parse_suffix(c_clean);
+    let l_suf = parse_suffix(l_clean);
     if !c_suf.is_empty() && l_suf.is_empty() {
         return true;
     }
     if c_suf.is_empty() && !l_suf.is_empty() {
         return false;
     }
-
     l_suf > c_suf
 }
 
 pub async fn check_addon_update(id: AddonId) -> AddonVersionInfo {
     let current_ver = get_local_addon_version(id);
-    let (latest_tag, dl_url) = match id {
+    let (latest_tag, dl_url): (Option<String>, Option<String>) = match id {
         AddonId::RenoDxDlss5 => {
-            if let Ok((url, tag)) = resolve_github_latest_asset("yumlevi/renodx-dlss-installer", |name| {
-                name.ends_with(".addon64") && name.contains("renodx")
+            if let Ok((url, tag)) = resolve_github_latest_asset("bookamp/dlss-studio", |name| {
+                name == "renodx-dlss.addon64" || name.contains("renodx-dlss")
             }).await {
                 (Some(tag), Some(url))
             } else {
-                (None, None)
+                (Some("latest".to_string()), Some(RENODX_DLSS_URL.to_string()))
             }
         }
         AddonId::DlssMipFix => {
@@ -341,7 +468,10 @@ pub async fn check_addon_update(id: AddonId) -> AddonVersionInfo {
             (Some(tag), Some(url))
         }
         AddonId::ReShade => (Some("v6.8.0".to_string()), Some(super::catalog::RESHADE_SETUP_URL.to_string())),
-        AddonId::Streamline => (Some("v2.14.1".to_string()), Some(super::catalog::STREAMLINE_ZIP_URL.to_string())),
+        AddonId::Streamline => {
+            let (url, tag) = super::catalog::resolve_latest_streamline().await;
+            (tag, url)
+        }
         AddonId::DgVoodoo => {
             if let Ok((url, tag)) = resolve_github_latest_asset("dege-diosg/dgVoodoo2", |name| {
                 name.starts_with("dgVoodoo2_") && name.ends_with(".zip")

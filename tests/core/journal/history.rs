@@ -52,7 +52,7 @@ fn test_now_timestamp_str() {
 #[test]
 fn test_save_and_read_history_lifecycle() {
     let file = HistoryFile {
-        version: "2.0.2".to_string(),
+        version: "2.0.3".to_string(),
         entries: vec![
             HistoryRow {
                 date: "2026-10-01 12:00:00 UTC".to_string(),

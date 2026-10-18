@@ -32,9 +32,30 @@ pub fn find_optiscaler_payload() -> Option<PathBuf> {
                 let path = entry.path();
                 if path.is_dir() {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    if name.to_lowercase().contains("optiscaler") && path.join("OptiScaler.dll").is_file() {
-                        let score = score_optiscaler_dir(&name);
-                        candidates.push((score, path));
+                    if name.to_lowercase().contains("optiscaler") {
+                        if path.join("OptiScaler.dll").is_file() {
+                            let score = score_optiscaler_dir(&name);
+                            candidates.push((score, path));
+                        } else {
+                            // Auto-heal nested directory if archive extracted into DLSS5-Optimised or OptiScaler
+                            let candidate_subdirs = ["DLSS5-Optimised", "OptiScaler"];
+                            for sub_name in &candidate_subdirs {
+                                let sub_p = path.join(sub_name);
+                                if sub_p.is_dir() && sub_p.join("OptiScaler.dll").is_file() {
+                                    if let Ok(sub_entries) = fs::read_dir(&sub_p) {
+                                        for se in sub_entries.flatten() {
+                                            let _ = fs::rename(se.path(), path.join(se.file_name()));
+                                        }
+                                    }
+                                    let _ = fs::remove_dir_all(&sub_p);
+                                    if path.join("OptiScaler.dll").is_file() {
+                                        let score = score_optiscaler_dir(&name);
+                                        candidates.push((score, path.clone()));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -122,15 +143,18 @@ pub fn find_mfg_addon_payload() -> Option<PathBuf> {
     find_mfg_unlock_payload()
 }
 
-/// Discovers the path to renodx-dlss5.addon64 or renodx-dlss.addon64.
+/// Discovers the path to renodx-dlss.addon64 or renodx-dlss5.addon64.
 pub fn find_renodx_dlss5_payload() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
+    candidates.push(PathBuf::from("external_assets/renodx-dlss.addon64"));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external_assets").join("renodx-dlss.addon64"));
+
     for root in get_component_roots() {
-        candidates.push(root.join("renodx-dlss5").join("renodx-dlss5.addon64"));
-        candidates.push(root.join("renodx-dlss5.addon64"));
         candidates.push(root.join("renodx-dlss").join("renodx-dlss.addon64"));
         candidates.push(root.join("renodx-dlss.addon64"));
+        candidates.push(root.join("renodx-dlss5").join("renodx-dlss5.addon64"));
+        candidates.push(root.join("renodx-dlss5.addon64"));
     }
 
     for c in candidates {
@@ -171,8 +195,8 @@ pub fn find_streamline_nvngx_dlss_payload() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
     for root in get_component_roots() {
-        candidates.push(root.join("streamline-2.14.1").join("streamline").join("nvngx_dlss.dll"));
         candidates.push(root.join("streamline").join("nvngx_dlss.dll"));
+        candidates.push(root.join("streamline-2.14.1").join("streamline").join("nvngx_dlss.dll"));
         candidates.push(root.join("nvngx_dlss.dll"));
     }
 
@@ -193,9 +217,12 @@ pub fn find_dlss_payload() -> Option<PathBuf> {
 pub fn find_streamline_nvngx_dlssnr_payload() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
+    candidates.push(PathBuf::from("external_assets/nvngx_dlssnr.dll"));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external_assets").join("nvngx_dlssnr.dll"));
+
     for root in get_component_roots() {
-        candidates.push(root.join("streamline-2.14.1").join("streamline").join("nvngx_dlssnr.dll"));
         candidates.push(root.join("streamline").join("nvngx_dlssnr.dll"));
+        candidates.push(root.join("streamline-2.14.1").join("streamline").join("nvngx_dlssnr.dll"));
         candidates.push(root.join("nvngx_dlssnr.dll"));
     }
 
@@ -255,8 +282,8 @@ pub fn find_streamline_interposer_dir() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
     for root in get_component_roots() {
-        candidates.push(root.join("streamline-2.14.1").join("streamline"));
         candidates.push(root.join("streamline"));
+        candidates.push(root.join("streamline-2.14.1").join("streamline"));
     }
 
     for c in candidates {

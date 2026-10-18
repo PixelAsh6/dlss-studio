@@ -79,9 +79,11 @@ pub fn load_state() -> AppState {
             let current_version = CURRENT_APP_VERSION;
             let old_version = state.version.clone();
             let needs_migration = old_version.as_deref() != Some(current_version);
-            let migrated = migrate_app_state(&mut state, old_version.as_deref(), current_version);
-            if needs_migration || migrated {
-                let _ = save_state(&state);
+            if needs_migration {
+                let migrated = migrate_app_state(&mut state, old_version.as_deref(), current_version);
+                if migrated {
+                    let _ = save_state(&state);
+                }
             }
             return state;
         }

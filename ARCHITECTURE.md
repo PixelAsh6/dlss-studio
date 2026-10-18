@@ -171,12 +171,12 @@ sequenceDiagram
 | Component | Target Location | SHA-256 Verification | Purpose |
 | :--- | :--- | :--- | :--- |
 | **ReShade 6.8.0** | `dxgi.dll` / `opengl32.dll` / `ReShade64.dll` | Verified runtime hash | Base presentation and addon hook injection engine. |
-| **RenoDX v4.7 Integrated Engine** | `renodx-dlss5.addon64` | `c8bc90064d7fa3d0...` | In-process D3D12 NGX vtable detouring & Neural Reconstruction bridge. |
+| **RenoDX Integrated Engine** | `renodx-dlss.addon64` | Verified runtime hash | In-process D3D12 NGX vtable detouring & Neural Reconstruction bridge. |
 | **4x MFG Unlock Addon** | `renodx-mfgunlock.addon64` | `64184bb370f223c3...` | Intercepts Streamline Frame Generation contracts to unlock up to 4x multiplier. |
 | **Universal RTXMFG v1.3.2** | `version.dll` | Verified standalone hash | Standalone proxy hook for vendor-agnostic 4x Frame Generation. |
 | **DLSS 5 Feeder Stack** | `dlss5-feed.addon64`, `DLSS5_Feed.fx`, `vort_Motion.fx` | Verified bundle hash | Captures color and motion vectors in non-DX12 / non-Streamline titles. |
 | **OptiScaler 0.7.7** | `OptiScaler.dll`, `OptiScaler.ini`, `OptiScaler/` | Verified archive hash | Open-source multi-vendor DLSS replacement and Pre-SR sharpening pipeline. |
-| **Streamline 2.14.1 Stack** | `sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `sl.reflex.dll`, `sl.pcl.dll` | Verified release stack | Canonical runtime stack to eliminate driver OTA ABI mismatch crashes (`0xC0000005`). |
+| **Streamline 2.14.1 Stack** | `sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `sl.reflex.dll` | Verified release stack | Canonical runtime stack to eliminate driver OTA ABI mismatch crashes (`0xC0000005`). |
 | **NVIDIA DLSS-NR 310.8.0** | `nvngx_dlssnr.dll`, `nvngx.dll_dlssnr.dll` | Verified driver snippet | Official signed NVIDIA Neural Reconstruction and Ray Reconstruction runtime. |
 
 ---
@@ -246,7 +246,7 @@ On Vulkan titles (e.g., *Baldur's Gate 3* `bg3.exe`), Windows does not load DLLs
 4. When switching away from Feeder to OptiScaler or restoring originals, the layer is dynamically unregistered so the Vulkan loader never loads ReShade into non-Feeder games.
 
 ### C. RenoDX D3D12 NGX Detouring
-In native DirectX 12 titles, `renodx-dlss5.addon64` hooks directly into the NVIDIA NGX vtable:
+In native DirectX 12 titles, `renodx-dlss.addon64` hooks directly into the NVIDIA NGX vtable:
 ```text
 NVSDK_NGX_D3D12_CreateFeature   -> Hooked to RenoDX pre-processor
 NVSDK_NGX_D3D12_EvaluateFeature -> Hooked to RenoDX inline Neural Reconstruction pipeline
