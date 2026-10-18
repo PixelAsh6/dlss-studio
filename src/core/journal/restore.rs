@@ -1,14 +1,11 @@
 use std::fs;
 use std::path::Path;
-use super::clean::{archive_added_history, clean_untracked_mods, clean_untracked_mods_with_exe, is_corrupted_or_mod_backup};
-use super::manifest::{
-    backup_dir, prune_old_manifests, read_manifest, read_or_backfill_added_history,
-    resolve_target_path, ActiveManifest,
-};
+use super::clean::{clean_untracked_mods, clean_untracked_mods_with_exe, is_corrupted_or_mod_backup};
+use super::manifest::{backup_dir, read_manifest, resolve_target_path};
 
 pub fn has_backup_available(game_dir: &Path) -> bool {
     let bdir = backup_dir(game_dir);
-    bdir.join("manifest.json").exists() || bdir.join("pending-switch.json").exists()
+    bdir.join("manifest.json").exists()
 }
 
 pub fn restore_game(game_dir: &Path) -> std::io::Result<bool> {
@@ -18,6 +15,13 @@ pub fn restore_game(game_dir: &Path) -> std::io::Result<bool> {
         None => {
             // Fallback: clean untracked mods if no manifest is found
             let cleaned = clean_untracked_mods(game_dir)?;
+            let bdir = backup_dir(game_dir);
+            if bdir.exists() {
+                let originals = bdir.join("originals");
+                if !originals.exists() || fs::read_dir(&originals).map(|mut d| d.next().is_none()).unwrap_or(true) {
+                    let _ = fs::remove_dir_all(&bdir);
+                }
+            }
             crate::core::logger::info("restore", &format!("No active manifest found for {}; cleaned untracked mods: {:?}", game_dir.display(), cleaned));
             return Ok(!cleaned.is_empty());
         }
@@ -34,12 +38,55 @@ pub fn restore_game(game_dir: &Path) -> std::io::Result<bool> {
 
     let bdir = backup_dir(game_dir);
 
+    // ========================================================
+    // STEP 1: Delete all added mod files, directories & untracked mods
+    // ========================================================
+    for rel in &manifest.added {
+        let target_file = resolve_target_path(game_dir, rel);
+        if target_file.exists() {
+            let _ = fs::remove_file(&target_file);
+            crate::core::logger::debug("restore", &format!("Removed mod file: {}", target_file.display()));
+        }
+    }
+
+    for rel in manifest.added_dirs.iter().rev() {
+        let target_dir = resolve_target_path(game_dir, rel);
+        if target_dir.exists() {
+            let _ = fs::remove_dir_all(&target_dir);
+            crate::core::logger::debug("restore", &format!("Removed mod directory: {}", target_dir.display()));
+        }
+    }
+
+    // Also purge known leftover injected mod files and unregister vulkan layer
+    let _ = clean_untracked_mods_with_exe(game_dir, exe_opt.as_deref());
+    let _ = crate::core::vulkan_layer::unregister_vulkan_layer(game_dir);
+
+    // ========================================================
+    // STEP 2: Restore all original files from backup
+    // ========================================================
     for item in &manifest.replaced {
-        let backup_file = if let Some(ref p) = manifest.backup_prefix {
+        let mut backup_file = if let Some(ref p) = manifest.backup_prefix {
             bdir.join(p).join(&item.rel)
         } else {
             bdir.join(&item.rel)
         };
+
+        // Fallback: search in originals/ or other prefix folders if not at primary path
+        if !backup_file.exists() {
+            let direct = bdir.join("originals").join(&item.rel);
+            if direct.is_file() {
+                backup_file = direct;
+            } else if let Ok(entries) = fs::read_dir(bdir.join("originals")) {
+                for entry in entries.flatten() {
+                    let candidate = entry.path().join(&item.rel);
+                    if candidate.is_file() {
+                        backup_file = candidate;
+                        break;
+                    }
+                }
+            }
+        }
+
         let target_file = resolve_target_path(game_dir, &item.rel);
         if backup_file.exists() {
             // Safety check: if the backed-up file was actually a proxy hook or mod file
@@ -60,81 +107,13 @@ pub fn restore_game(game_dir: &Path) -> std::io::Result<bool> {
         }
     }
 
-    for rel in &manifest.added {
-        let target_file = resolve_target_path(game_dir, rel);
-        if target_file.exists() {
-            let _ = fs::remove_file(&target_file);
-            crate::core::logger::debug("restore", &format!("Removed mod file: {}", target_file.display()));
-        }
+    // ========================================================
+    // STEP 3: Remove _DLSS5_Backup entirely (pristine game folder)
+    // ========================================================
+    if bdir.exists() {
+        let _ = fs::remove_dir_all(&bdir);
+        crate::core::logger::info("restore", &format!("Removed backup directory: {}", bdir.display()));
     }
-
-    for rel in manifest.added_dirs.iter().rev() {
-        let target_dir = resolve_target_path(game_dir, rel);
-        if target_dir.exists() {
-            let _ = fs::remove_dir_all(&target_dir);
-            crate::core::logger::debug("restore", &format!("Removed mod directory: {}", target_dir.display()));
-        }
-    }
-
-    // Inspect all historical manifests and remove any file that was ever recorded in added
-    if let Ok(entries) = fs::read_dir(&bdir) {
-        for entry in entries.filter_map(|e| e.ok()) {
-            let fname = entry.file_name().to_string_lossy().to_string();
-            if fname.starts_with("manifest.json.done-") {
-                if let Ok(content) = fs::read_to_string(entry.path()) {
-                    if let Ok(past_m) = serde_json::from_str::<ActiveManifest>(&content) {
-                        for rel in &past_m.added {
-                            let target_file = resolve_target_path(game_dir, rel);
-                            if target_file.exists() {
-                                let _ = fs::remove_file(&target_file);
-                                crate::core::logger::debug("restore", &format!("Removed historically added file: {}", target_file.display()));
-                            }
-                        }
-                        for rel in past_m.added_dirs.iter().rev() {
-                            let target_dir = resolve_target_path(game_dir, rel);
-                            if target_dir.exists() {
-                                let _ = fs::remove_dir_all(&target_dir);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Purge any file recorded in cumulative added history
-    let history = read_or_backfill_added_history(game_dir);
-    for rel in &history.files {
-        let target_file = resolve_target_path(game_dir, rel);
-        if target_file.exists() {
-            let _ = fs::remove_file(&target_file);
-            crate::core::logger::debug("restore", &format!("Removed historically added file from cumulative history: {}", target_file.display()));
-        }
-    }
-    for rel in history.dirs.iter().rev() {
-        let target_dir = resolve_target_path(game_dir, rel);
-        if target_dir.exists() {
-            let _ = fs::remove_dir_all(&target_dir);
-            crate::core::logger::debug("restore", &format!("Removed historically added directory from cumulative history: {}", target_dir.display()));
-        }
-    }
-
-    // Also purge known leftover injected mod files
-    let exe_opt = manifest.game_exe.as_ref()
-        .or_else(|| manifest.game.as_ref().and_then(|g| g.exe.as_ref()))
-        .map(|e| game_dir.join(e));
-    let _ = clean_untracked_mods_with_exe(game_dir, exe_opt.as_deref());
-    let _ = crate::core::vulkan_layer::unregister_vulkan_layer(game_dir);
-
-    let manifest_path = bdir.join("manifest.json");
-    if manifest_path.exists() {
-        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
-        let archive_name = format!("manifest.json.done-{}", ts);
-        let _ = fs::rename(&manifest_path, bdir.join(&archive_name));
-        crate::core::logger::info("restore", &format!("Archived manifest to: {}", archive_name));
-        let _ = prune_old_manifests(game_dir, 5);
-    }
-    let _ = archive_added_history(game_dir);
 
     crate::core::logger::info("restore", &format!("Restore successfully completed for {}", game_dir.display()));
 

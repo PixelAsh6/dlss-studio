@@ -1,4 +1,4 @@
-﻿use super::AddonId;
+use super::AddonId;
 
 pub const DLSS5_FEEDER_RELEASE_URL: &str = FEEDER_ARCHIVE_URL;
 pub const FEEDER_ARCHIVE_URL: &str = "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.16.0-beta.3/DLSS5-Feeder-1.16.0-beta.3.zip";
@@ -27,18 +27,23 @@ pub const MFG_UNLOCK_SHA256: &str = "f9f10c685e3e89077f751df2394a1629615a56b58d1
 
 pub const RTX40MFG_URL: &str = RTX40MFG_FALLBACK_URL;
 pub const RTX40MFG_FALLBACK_URL: &str = "https://github.com/dashdogy/RTX40MFG-Unlock/releases/download/v1.3.3-hotfix.2/RTXMFG-v1.3.3-hotfix.2.zip";
-pub const OPTISCALER_REPO: &str = "wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass";
-pub const OPTISCALER_REPO_URL: &str = "https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass";
-pub const OPTISCALER_URL: &str = "https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass/releases/download/v0.8.91/OptiScaler-NR-v0.8.91-rtx40-mfg.zip";
-pub const OPTISCALER_SHA256: &str = "93e6762ed3ab9f48a2f78b088346786383315a9916c32440f0fe6457422fad79";
+pub const OPTISCALER_REPO: &str = "Skynizz/optiscaler-dlss5";
+pub const OPTISCALER_REPO_URL: &str = "https://github.com/Skynizz/optiscaler-dlss5";
+pub const OPTISCALER_URL: &str = "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-win-x64.zip";
+pub const OPTISCALER_SHA256: &str = "0d5b24887ea2c622754da68efc76ef55ae42b5d3be350a8d43cafbabb6747ec6";
 pub const OPTISCALER_FALLBACK_URL: &str = OPTISCALER_URL;
 pub const OPTISCALER_MFG_FALLBACK_URL: &str = OPTISCALER_URL;
 
 pub const DLSS_MIP_FIX_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-mip-fix.addon64";
 pub const DLSS_NR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-nr.addon64";
 
-pub const RENODX_DLSS5_URL: &str = "https://github.com/yumlevi/renodx-dlss-installer/releases/download/latest/renodx-dlss5.addon64";
-pub const STREAMLINE_ZIP_URL: &str = "https://github.com/yumlevi/renodx-dlss-installer/releases/download/latest/streamline.zip";
+pub const RENODX_REPO_URL: &str = "https://github.com/bookamp/dlss-studio";
+pub const RENODX_DLSS_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/renodx-dlss.addon64";
+pub const RENODX_DLSS_SHA256: &str = "";
+pub const RENODX_DLSS5_URL: &str = RENODX_DLSS_URL;
+pub const RENODX_DLSS5_SHA256: &str = RENODX_DLSS_SHA256;
+pub const STREAMLINE_REPO_URL: &str = "https://github.com/bookamp/dlss-studio/releases";
+pub const NVNGX_DLSSNR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/nvngx_dlssnr.dll";
 pub const RESHADE_SETUP_URL: &str = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe";
 pub const RESHADE_SETUP_SHA256: &str = "afe4c8f13048306307983b8b3d41d5bf00a86820440b0e57dea10950e1176445";
 
@@ -60,12 +65,12 @@ pub fn get_metadata(id: AddonId) -> AddonMetadata {
     match id {
         AddonId::RenoDxDlss5 => AddonMetadata {
             id,
-            name: "RenoDX v4.7 (Integrated DLSS 5 Engine)",
+            name: "RenoDX (Integrated DLSS 5 Engine)",
             description_key: "addon_renodx_desc",
-            url: RENODX_DLSS5_URL,
-            expected_sha256: "",
+            url: RENODX_DLSS_URL,
+            expected_sha256: RENODX_DLSS_SHA256,
             mandatory: true,
-            target_filename: "renodx-dlss5.addon64",
+            target_filename: "renodx-dlss.addon64",
         },
         AddonId::DlssMipFix => AddonMetadata {
             id,
@@ -105,7 +110,7 @@ pub fn get_metadata(id: AddonId) -> AddonMetadata {
         },
         AddonId::OptiScaler => AddonMetadata {
             id,
-            name: "OptiScaler DLSS-NR Pre-SR Multi-pass",
+            name: "OptiScaler DLSS 5 (Edit Cache & Pre-SR)",
             description_key: "addon_optiscaler_desc",
             url: OPTISCALER_URL,
             expected_sha256: OPTISCALER_SHA256,
@@ -123,9 +128,9 @@ pub fn get_metadata(id: AddonId) -> AddonMetadata {
         },
         AddonId::Streamline => AddonMetadata {
             id,
-            name: "Streamline Runtime v2.14.1",
+            name: "Streamline & Neural Rendering (DLSS-NR)",
             description_key: "addon_streamline_desc",
-            url: STREAMLINE_ZIP_URL,
+            url: STREAMLINE_REPO_URL,
             expected_sha256: "",
             mandatory: true,
             target_filename: "sl.interposer.dll",
@@ -191,18 +196,103 @@ pub async fn resolve_latest_dashdogy_mfg() -> (String, String) {
 
 /// Resolves the latest download URL and tag for OptiScaler dynamically
 pub async fn resolve_latest_optiscaler() -> (String, String) {
-    if let Ok((url, tag)) = resolve_github_latest_asset("wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass", |name| {
-        (name.starts_with("OptiScaler-NR-") || name.starts_with("OptiScaler-DLSSNR-") || name.starts_with("OptiScaler-")) && name.ends_with(".zip")
+    if let Ok((url, tag)) = resolve_github_latest_asset("Skynizz/optiscaler-dlss5", |name| {
+        (name.starts_with("OptiScaler-DLSS5-") || name.starts_with("OptiScaler-"))
+            && name.ends_with("-win-x64.zip")
+            && !name.contains("-source")
     }).await {
         return (url, tag);
     }
     (
         OPTISCALER_FALLBACK_URL.to_string(),
-        "v0.8.91".to_string(),
+        "v1.2.1".to_string(),
     )
 }
 
 /// Helper alias
 pub async fn resolve_latest_optiscaler_mfg() -> (String, String) {
     resolve_latest_optiscaler().await
+}
+
+/// Parses the compound version string from a versioned Streamline release asset filename.
+/// Expects format: "streamline-{sl_ver}-dlssnr-{nr_ver}.zip"
+/// Example: "streamline-2.14.1-dlssnr-310.9.16.0.zip" -> Some("2.14.1 (DLSS-NR 310.9.16.0)")
+pub fn parse_streamline_asset_name(name: &str) -> Option<String> {
+    let clean = name.trim();
+    if !clean.starts_with("streamline-") || !clean.ends_with(".zip") {
+        return None;
+    }
+    let inner = clean.trim_start_matches("streamline-").trim_end_matches(".zip");
+    let (sl_ver, nr_ver) = if let Some(idx) = inner.find("-dlssnr-") {
+        (&inner[..idx], &inner[idx + "-dlssnr-".len()..])
+    } else if let Some(idx) = inner.find("-nr-") {
+        (&inner[..idx], &inner[idx + "-nr-".len()..])
+    } else {
+        return None;
+    };
+    if sl_ver.is_empty() || nr_ver.is_empty() {
+        return None;
+    }
+    Some(format!("{} (DLSS-NR {})", sl_ver, nr_ver))
+}
+
+/// Resolves the latest download URL and dynamic version tag for Streamline & DLSS-NR.
+/// Queries GitHub Releases for `bookamp/dlss-studio` assets matching `streamline-*.zip`.
+/// For local development before a public release is cut, also checks `dist/` or `external_assets/`.
+pub async fn resolve_latest_streamline() -> (Option<String>, Option<String>) {
+    // 1. Check GitHub API for release assets matching streamline-*.zip
+    if let Ok(client) = reqwest::Client::builder()
+        .user_agent(concat!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) DLSS-Studio/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(6))
+        .build()
+    {
+        let url = "https://api.github.com/repos/bookamp/dlss-studio/releases";
+        if let Ok(resp) = client.get(url).send().await {
+            if resp.status().is_success() {
+                if let Ok(releases) = resp.json::<Vec<serde_json::Value>>().await {
+                    for rel in releases {
+                        if let Some(assets) = rel.get("assets").and_then(|v| v.as_array()) {
+                            for asset in assets {
+                                let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                if let Some(version_tag) = parse_streamline_asset_name(name) {
+                                    if let Some(dl_url) = asset.get("browser_download_url").and_then(|v| v.as_str()) {
+                                        return (Some(dl_url.to_string()), Some(version_tag));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Local staged asset check (for local testing before public release)
+    let mut local_search_dirs = vec![
+        std::path::PathBuf::from("dist"),
+        std::path::PathBuf::from("external_assets"),
+    ];
+    if let Ok(exe_p) = std::env::current_exe() {
+        if let Some(parent) = exe_p.parent() {
+            local_search_dirs.push(parent.join("dist"));
+            local_search_dirs.push(parent.join("external_assets"));
+            if let Some(grand) = parent.parent() {
+                local_search_dirs.push(grand.join("dist"));
+                local_search_dirs.push(grand.join("external_assets"));
+            }
+        }
+    }
+    for dir in local_search_dirs {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if let Some(version_tag) = parse_streamline_asset_name(&name) {
+                    let full_path = entry.path().to_string_lossy().to_string();
+                    return (Some(full_path), Some(version_tag));
+                }
+            }
+        }
+    }
+
+    (None, None)
 }

@@ -119,7 +119,9 @@ jobs:
 
           # 3. Resolve release notes markdown
           if [ -f "RELEASE_NOTES.md" ]; then
-            echo "body_file=RELEASE_NOTES.md" >> $GITHUB_OUTPUT
+            # Strip the redundant leading H1 header so GitHub Releases does not render the title twice
+            awk 'NR==1 && /^# / {next} NR<=2 && /^$/ {next} {print}' RELEASE_NOTES.md > cleaned_release_notes.md
+            echo "body_file=cleaned_release_notes.md" >> $GITHUB_OUTPUT
           else
             echo "body_file=generated_release_notes.md" >> $GITHUB_OUTPUT
             echo "## Release Overview" > generated_release_notes.md

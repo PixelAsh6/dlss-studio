@@ -1,6 +1,6 @@
 use dlss_studio::core::pe::{
     inspect_pe, is_large_address_aware, is_legacy_streamline_1x, is_optiscaler_or_proxy,
-    is_reshade_dll, set_large_address_aware,
+    is_reshade_dll, set_large_address_aware, parse_version_tuple, get_pe_version,
 };
 use crate::common::TempDir;
 
@@ -235,5 +235,33 @@ fn test_is_optiscaler_markers_variety() {
         std::fs::write(&p, bytes).unwrap();
         assert!(is_optiscaler_or_proxy(&p), "Marker {} should be detected", m);
     }
+}
+
+#[test]
+fn test_parse_version_tuple() {
+    assert_eq!(parse_version_tuple("2.14.1.0"), (2, 14, 1));
+    assert_eq!(parse_version_tuple("2.14.1"), (2, 14, 1));
+    assert_eq!(parse_version_tuple("2,14,1,0"), (2, 14, 1));
+    assert_eq!(parse_version_tuple("2, 13, 0, 0"), (2, 13, 0));
+    assert_eq!(parse_version_tuple("1.4.2"), (1, 4, 2));
+    assert_eq!(parse_version_tuple("3.7.0.0"), (3, 7, 0));
+    assert_eq!(parse_version_tuple("invalid"), (0, 0, 0));
+    assert_eq!(parse_version_tuple(""), (0, 0, 0));
+}
+
+#[test]
+fn test_get_pe_version_on_system_dll() {
+    let kernel32 = std::path::Path::new(r"C:\Windows\System32\kernel32.dll");
+    if kernel32.is_file() {
+        let ver = get_pe_version(kernel32);
+        assert!(ver.is_some(), "kernel32.dll must have a valid PE version");
+        let (maj, _, _) = ver.unwrap();
+        assert!(maj >= 6, "Windows NT kernel32 major version should be >= 6 (is {})", maj);
+    }
+
+    let temp_dir = TempDir::new("pe_non_ver");
+    let non_pe = temp_dir.path().join("dummy.txt");
+    std::fs::write(&non_pe, b"just text").unwrap();
+    assert_eq!(get_pe_version(&non_pe), None);
 }
 

@@ -3149,6 +3149,7 @@ async fn deploy_or_restore_payload(
     status_banner: &mut Signal<Option<String>>,
     games: &mut Signal<Vec<GameEntry>>,
 ) -> bool {
+    let lang = crate::core::state::load_state().lang;
     if is_vanilla {
         let g_dir = target_game.dir.clone();
         let restore_res = tokio::task::spawn_blocking(move || {
@@ -3158,7 +3159,7 @@ async fn deploy_or_restore_payload(
         match restore_res {
             Ok(Err(err)) => {
                 eprintln!("[BigPicture] Restore error: {}", err);
-                status_banner.set(Some(format!("Restore error: {}", err)));
+                status_banner.set(Some(crate::core::i18n::t_param(&lang, "bp_status_restore_error", &err.to_string())));
                 return false;
             }
             Err(join_err) => {
@@ -3191,7 +3192,7 @@ async fn deploy_or_restore_payload(
         match deploy_res {
             Ok(Err(err)) => {
                 eprintln!("[BigPicture] Deploy error: {}", err);
-                status_banner.set(Some(format!("Installation failed: {}", err)));
+                status_banner.set(Some(crate::core::i18n::t_param(&lang, "bp_status_install_error", &err.to_string())));
                 return false;
             }
             Err(join_err) => {
@@ -3323,7 +3324,7 @@ fn trigger_launch(
         &lang,
     ));
 
-    status_banner.set(Some(format!("Preparing {}...", target_game.name)));
+    status_banner.set(Some(crate::core::i18n::t_param(&lang, "bp_status_preparing", &target_game.name)));
 
     let exe = target_game.exe_path.clone();
     let name = target_game.name.clone();
@@ -3417,7 +3418,7 @@ fn trigger_launch(
             }
             Err(e) => {
                 crate::big_picture::logger::error("ui", &format!("Game launch error: {}", e));
-                status_banner.set(Some(format!("Launch error: {}", e)));
+                status_banner.set(Some(crate::core::i18n::t_param(&lang_for_spawn, "bp_status_launch_error", &e)));
             }
         }
 

@@ -396,6 +396,23 @@ fn test_all_new_dictionary_keys_coverage() {
         "advisory_rec_feeder_generic",
         "advisory_rec_feeder_api",
         "advisory_rec_feeder_sr_dlaa",
+        "log_cleaned_orphaned_art",
+        "log_added_game",
+        "log_added_folder",
+        "log_no_game_found",
+        "toast_cleaned_art",
+        "toast_art_already_clean",
+        "toast_unhide_games",
+        "tooltip_big_picture",
+        "dlg_browse_game_folder",
+        "dlg_add_one_game",
+        "dlg_scan_folder",
+        "dlg_add_addon_build",
+        "dlg_select_cover_image",
+        "bp_status_restore_error",
+        "bp_status_install_error",
+        "bp_status_preparing",
+        "bp_status_launch_error",
     ];
     for k in &test_keys {
         for l in &langs {

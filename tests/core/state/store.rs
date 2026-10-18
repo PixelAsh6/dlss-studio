@@ -175,3 +175,15 @@ fn test_add_and_remove_custom_addon_lifecycle() {
     remove_custom_addon(&mut state, "C:\\Mods\\test.addon64");
     assert_eq!(state.addon_files.len(), initial_count);
 }
+
+#[test]
+fn test_load_state_skips_migration_when_current_version() {
+    let _state_lock = dlss_studio::core::state::STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = load_state();
+    state.version = Some(CURRENT_APP_VERSION.to_string());
+    save_state(&state).expect("save state must succeed");
+
+    let loaded = load_state();
+    assert_eq!(loaded.version.as_deref(), Some(CURRENT_APP_VERSION));
+}
+

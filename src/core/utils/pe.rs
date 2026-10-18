@@ -378,4 +378,24 @@ pub fn is_legacy_streamline_1x<P: AsRef<Path>>(path: P) -> bool {
     false
 }
 
+/// Parses a version string into a comparable tuple (major, minor, patch).
+/// Handles formats like "2.14.1.0", "2.14.1", "2,14,1,0".
+pub fn parse_version_tuple(ver_str: &str) -> (u32, u32, u32) {
+    let parts: Vec<u32> = ver_str
+        .split(|c: char| c == '.' || c == ',')
+        .filter_map(|s| s.trim().parse::<u32>().ok())
+        .collect();
+    let major = parts.first().copied().unwrap_or(0);
+    let minor = parts.get(1).copied().unwrap_or(0);
+    let patch = parts.get(2).copied().unwrap_or(0);
+    (major, minor, patch)
+}
+
+/// Returns the PE file version as (major, minor, patch) if present.
+pub fn get_pe_version<P: AsRef<Path>>(path: P) -> Option<(u32, u32, u32)> {
+    let info = inspect_pe(path)?;
+    let ver = info.version?;
+    Some(parse_version_tuple(&ver))
+}
+
 

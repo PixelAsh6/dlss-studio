@@ -1,4 +1,4 @@
-# DLSS 5 Studio v2.0.2 ⚡
+# DLSS 5 Studio v2.0.3 ⚡
 
 > **Sunshine / Apollo streaming session lifecycle synchronization, smooth Big Picture enter/exit transitions, refined exit dialog, and core domain modularization.**
 
@@ -33,8 +33,8 @@
 
 | File | Type | Description |
 | :--- | :--- | :--- |
-| **`dlss-studio-v2.0.2-setup.exe`** | Standalone Setup / Installer (Recommended) | Native Rust setup wizard with configurable install and data storage locations, Start Menu & Desktop shortcuts, and Windows registration. |
-| **`dlss-studio-v2.0.2-portable.exe`** | Portable Executable | Standalone self-contained executable. Run anywhere with no installation required. |
+| **`dlss-studio-v2.0.3-setup.exe`** | Standalone Setup / Installer (Recommended) | Native Rust setup wizard with configurable install and data storage locations, Start Menu & Desktop shortcuts, and Windows registration. |
+| **`dlss-studio-v2.0.3-portable.exe`** | Portable Executable | Standalone self-contained executable. Run anywhere with no installation required. |
 | **`dlss-mip-fix.addon64`** | D3D12 Mip Companion Add-on | Standalone pure Rust ReShade companion add-on for D3D12 mip level bias tuning and texture filtering. |
 
 ---

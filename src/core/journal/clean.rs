@@ -1,8 +1,7 @@
 use std::fs;
 use std::path::Path;
 use super::manifest::{
-    backup_dir, prune_old_manifests, read_latest_done_manifest, read_manifest,
-    read_or_backfill_added_history, resolve_target_path, strip_verbatim,
+    backup_dir, read_manifest, resolve_target_path, strip_verbatim,
 };
 
 pub fn is_proxy_hook(path: &Path) -> bool {
@@ -41,6 +40,7 @@ pub fn is_corrupted_or_mod_backup(path: &Path) -> bool {
         || fname == "dlss5-feed-host64.exe"
         || fname == "dlss-overlay.addon64"
         || fname == "dlss5-lab-overlay.addon64"
+        || fname == "renodx-dlss.addon64"
         || fname == "renodx-dlss5.addon64"
         || fname == "dlss-mip-fix.addon64"
         || fname == "dlss-mip-fix.cfg"
@@ -53,7 +53,6 @@ pub fn is_corrupted_or_mod_backup(path: &Path) -> bool {
         || fname == "dgvoodoo.log"
         || fname == "rtxmfg-universal.json"
         || fname == "rtx40mfg-universal.json"
-        || fname == "sl.pcl.dll"
         || fname.starts_with("rtxmfg-")
         || fname.ends_with(".addon64")
         || fname.ends_with(".addon32")
@@ -64,16 +63,21 @@ pub fn is_corrupted_or_mod_backup(path: &Path) -> bool {
     false
 }
 
-pub fn archive_added_history(game_dir: &Path) -> std::io::Result<()> {
-    let bdir = backup_dir(game_dir);
-    let hist_path = bdir.join("added_history.json");
-    if hist_path.exists() {
-        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
-        let archive_name = format!("added_history.json.done-{}", ts);
-        let _ = fs::rename(&hist_path, bdir.join(&archive_name));
-        crate::core::logger::info("journal", &format!("Archived cumulative added history to {}", archive_name));
+pub fn is_backed_up_original(bdir: &Path, rel: &str) -> bool {
+    let orig_dir = bdir.join("originals");
+    if !orig_dir.is_dir() {
+        return false;
     }
-    Ok(())
+    if let Ok(entries) = fs::read_dir(&orig_dir) {
+        for entry in entries.flatten() {
+            let candidate = entry.path().join(rel);
+            if candidate.is_file() && !is_corrupted_or_mod_backup(&candidate) {
+                return true;
+            }
+        }
+    }
+    let direct = orig_dir.join(rel);
+    direct.is_file() && !is_corrupted_or_mod_backup(&direct)
 }
 
 pub fn clean_untracked_mods(game_dir: &Path) -> std::io::Result<Vec<String>> {
@@ -139,23 +143,13 @@ pub fn clean_untracked_mods_with_exe(game_dir: &Path, exe_path: Option<&Path>) -
         }
     }
 
-    // Also purge files listed in cumulative added history, active manifest, or recent manifest
-    let history = read_or_backfill_added_history(game_dir);
-    for rel in &history.files {
-        let target_file = resolve_target_path(game_dir, rel);
-        if target_file.exists() && fs::remove_file(&target_file).is_ok() {
-            removed.push(rel.clone());
-        }
-    }
-    for rel in history.dirs.iter().rev() {
-        let target_dir = resolve_target_path(game_dir, rel);
-        if target_dir.exists() && fs::remove_dir_all(&target_dir).is_ok() {
-            removed.push(format!("{}/", rel));
-        }
-    }
+    let bdir = backup_dir(game_dir);
 
-    if let Some(manifest) = read_manifest(game_dir).or_else(|| read_latest_done_manifest(game_dir)) {
+    if let Some(manifest) = read_manifest(game_dir) {
         for rel in &manifest.added {
+            if is_backed_up_original(&bdir, rel) {
+                continue;
+            }
             let target_file = resolve_target_path(game_dir, rel);
             if target_file.exists() && fs::remove_file(&target_file).is_ok() {
                 if !removed.contains(rel) {
@@ -178,6 +172,10 @@ pub fn clean_untracked_mods_with_exe(game_dir: &Path, exe_path: Option<&Path>) -
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
+                let rel_str = path.strip_prefix(game_dir).map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                if is_backed_up_original(&bdir, &rel_str) {
+                    continue;
+                }
                 let fname = entry.file_name().to_string_lossy().to_string();
                 let lower = fname.to_lowercase();
 
@@ -212,7 +210,6 @@ pub fn clean_untracked_mods_with_exe(game_dir: &Path, exe_path: Option<&Path>) -
                     || lower == "nvngx_dlssnr.dll"
                     || lower == "rtxmfg-universal.json"
                     || lower == "rtx40mfg-universal.json"
-                    || lower == "sl.pcl.dll"
                     || lower.starts_with("rtxmfg-")
                     || lower.ends_with(".addon64")
                     || lower.ends_with(".addon32")
@@ -254,14 +251,20 @@ pub fn clean_untracked_mods_with_exe(game_dir: &Path, exe_path: Option<&Path>) -
         }
     }
 
-    // If active manifest exists, archive it so it doesn't leave active state
-    let bdir = backup_dir(game_dir);
-    let manifest_path = bdir.join("manifest.json");
-    if manifest_path.exists() {
-        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
-        let archive_name = format!("manifest.json.done-{}", ts);
-        let _ = fs::rename(&manifest_path, bdir.join(&archive_name));
-        let _ = prune_old_manifests(game_dir, 5);
+    // Remove active manifest since mods were purged, and clean legacy records
+    if bdir.is_dir() {
+        let manifest_path = bdir.join("manifest.json");
+        if manifest_path.exists() {
+            let _ = fs::remove_file(&manifest_path);
+        }
+        if let Ok(entries) = fs::read_dir(&bdir) {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if fname.starts_with("manifest.json.done-") || fname.starts_with("added_history.json") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
     }
 
     if !removed.is_empty() {

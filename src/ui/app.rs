@@ -103,7 +103,7 @@ fn ingest_game_or_library_path(
                 sheet_open.set(true);
                 active_view.set("games".to_string());
                 status_state.set(AppStatus::AddedGame(game.name.clone()));
-                log_message(&format!("Added game: {}", game.name));
+                log_message(&format!("@{{log_added_game|{}}}", game.name));
                 if game.poster.is_none() {
                     trigger_artwork_resolution(games, vec![(game.name.clone(), game.dir.clone())]);
                 }
@@ -127,7 +127,7 @@ fn ingest_game_or_library_path(
                 games.set(deduped.clone());
                 active_view.set("games".to_string());
                 status_state.set(AppStatus::FoundGames(count));
-                log_message(&format!("Added library folder: {} (found {} games)", root_folder.display(), count));
+                log_message(&format!("@{{log_added_folder|{}|{}}}", root_folder.display(), count));
                 let missing: Vec<(String, std::path::PathBuf)> = deduped.iter()
                     .filter(|g| g.poster.is_none())
                     .map(|g| (g.name.clone(), g.dir.clone()))
@@ -141,7 +141,7 @@ fn ingest_game_or_library_path(
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| folder.to_string_lossy().to_string());
                 status_state.set(AppStatus::NoGamesFound(name.clone()));
-                log_message(&format!("No game found in {}", folder.display()));
+                log_message(&format!("@{{log_no_game_found|{}}}", folder.display()));
             }
         }
     });
@@ -594,7 +594,7 @@ pub fn App() -> Element {
                 let s_art = load_state();
                 let stats = crate::core::steamart::cleanup_unused_art(&fresh, &s_art.hidden, &s_art.posters);
                 if stats.files_removed > 0 {
-                    log_message(&format!("Cleaned {} orphaned art files (reclaimed {} KB)", stats.files_removed, stats.bytes_reclaimed / 1024));
+                    log_message(&format!("@{{log_cleaned_orphaned_art|{}|{}}}", stats.files_removed, stats.bytes_reclaimed / 1024));
                 }
             }
 
@@ -1008,7 +1008,7 @@ pub fn App() -> Element {
                     button {
                         class: "win",
                         id: "winBigPicture",
-                        title: "Big Picture Mode (Gamepad & TV)",
+                        title: "{crate::core::i18n::t(&current_lang.read(), \"tooltip_big_picture\")}",
                         onmousedown: move |e| e.stop_propagation(),
                         onclick: move |e| {
                             e.stop_propagation();
@@ -1102,7 +1102,7 @@ pub fn App() -> Element {
                             },
                             onclick: move |_| {
                                 spawn(async move {
-                                    if let Some(handle) = rfd::AsyncFileDialog::new().set_title("Browse for game folder").pick_folder().await {
+                                    if let Some(handle) = rfd::AsyncFileDialog::new().set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_browse_game_folder")).pick_folder().await {
                                         ingest_game_or_library_path(
                                             handle.path().to_path_buf(),
                                             games,
@@ -1127,7 +1127,7 @@ pub fn App() -> Element {
                                 onclick: move |e| {
                                     e.stop_propagation();
                                     spawn(async move {
-                                        if let Some(handle) = rfd::AsyncFileDialog::new().set_title("Browse for game folder").pick_folder().await {
+                                        if let Some(handle) = rfd::AsyncFileDialog::new().set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_browse_game_folder")).pick_folder().await {
                                             ingest_game_or_library_path(
                                                 handle.path().to_path_buf(),
                                                 games,
@@ -1389,7 +1389,7 @@ pub fn App() -> Element {
                                       id: "addGame",
                                       onclick: move |_| {
                                           spawn(async move {
-                                              if let Some(handle) = rfd::AsyncFileDialog::new().set_title("Add one game").pick_folder().await {
+                                              if let Some(handle) = rfd::AsyncFileDialog::new().set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_add_one_game")).pick_folder().await {
                                                   ingest_game_or_library_path(
                                                       handle.path().to_path_buf(),
                                                       games,
@@ -1410,9 +1410,9 @@ pub fn App() -> Element {
                                      id: "addFolder",
                                      onclick: move |_| {
                                          spawn(async move {
-                                             if let Some(handle) = rfd::AsyncFileDialog::new().set_title("Scan this folder for games").pick_folder().await {
+                                             if let Some(handle) = rfd::AsyncFileDialog::new().set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_scan_folder")).pick_folder().await {
                                                  let folder = handle.path().to_path_buf();
-                                                 status_text.set("Scanning selected folder for games...".to_string());
+                                                 status_text.set(crate::core::i18n::t(&current_lang.peek(), "status_scanning_folder").to_string());
                                                   status_state.set(AppStatus::ScanningFolder(folder.file_name().unwrap_or_default().to_string_lossy().to_string()));
                                                  status_percent.set(50.0);
                                                  let folder_games = tokio::task::spawn_blocking({
@@ -1503,7 +1503,7 @@ pub fn App() -> Element {
                                             let s_art = load_state();
                                             let stats = crate::core::steamart::cleanup_unused_art(&deduped, &s_art.hidden, &s_art.posters);
                                             if stats.files_removed > 0 {
-                                                log_message(&format!("Cleaned {} orphaned art files (reclaimed {} KB)", stats.files_removed, stats.bytes_reclaimed / 1024));
+                                                log_message(&format!("@{{log_cleaned_orphaned_art|{}|{}}}", stats.files_removed, stats.bytes_reclaimed / 1024));
                                             }
                                         });
                                     },
@@ -1930,7 +1930,7 @@ pub fn App() -> Element {
                                             });
                                         },
                                         if *addon_update_batch_active.read() {
-                                            span { class: "spin-icon", "?" }
+                                            span { class: "spin-icon" }
                                             " {status_percent.read():.0}% ..."
                                         } else {
                                             "Update All ({outdated_count})"
@@ -1943,7 +1943,7 @@ pub fn App() -> Element {
                                 onclick: move |_| {
                                     spawn(async move {
                                         if let Some(handle) = rfd::AsyncFileDialog::new()
-                                            .set_title("Add an add-on build")
+                                            .set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_add_addon_build"))
                                             .add_filter("ReShade add-on", &["addon64", "addon"])
                                             .pick_file()
                                             .await
@@ -1996,8 +1996,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_renodx_engine_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "latest".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "latest".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2014,15 +2014,15 @@ pub fn App() -> Element {
                                                 "RenoDX (Full ReShade Add-on Engine)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
-                                            div { class: "d", "renodx-dlss5.addon64 \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_sha256_verified\")} \u{00B7} 1.65 MB" }
+                                            div { class: "d", "renodx-dlss.addon64 \u{00B7} ~3.2 MB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/yumlevi/renodx-dlss-installer"
+                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} {crate::core::addons::RENODX_REPO_URL}"
                                             }
                                             div { class: "dim", style: "font-size:0.82em; margin-top:4px;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"addon_renodx_desc\")}"
@@ -2031,7 +2031,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2083,7 +2083,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2098,8 +2098,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_dlss5_d3d12_fix_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v2.0.1".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v2.0.1".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2116,9 +2116,9 @@ pub fn App() -> Element {
                                                 "DLSS Studio D3D12 Mip Companion"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
@@ -2133,7 +2133,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2185,7 +2185,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2200,8 +2200,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_mfg_addon_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "1.4.1".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "1.4.1".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2218,9 +2218,9 @@ pub fn App() -> Element {
                                                 "RenoDX 4x MFG Unlock"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
@@ -2235,7 +2235,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2287,7 +2287,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2302,8 +2302,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_feeder_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v1.18.0-beta.1".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v1.18.0-beta.1".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2320,9 +2320,9 @@ pub fn App() -> Element {
                                                 "DLSS 5 Feeder (Neural Pipeline Interceptor)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
@@ -2337,7 +2337,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2389,7 +2389,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2404,8 +2404,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_rtxmfg_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v1.4.1-hotfix.1".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v1.4.1-hotfix.1".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2422,9 +2422,9 @@ pub fn App() -> Element {
                                                 "RTX40MFG-Unlock (Universal Frame Generation)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
@@ -2439,7 +2439,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2491,7 +2491,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2506,8 +2506,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_optiscaler_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v0.8.91".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v0.8.91".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2521,18 +2521,18 @@ pub fn App() -> Element {
                                         }
                                         div { class: "body",
                                             div { class: "t",
-                                                "OptiScaler DLSS-NR Pre-SR Multi-pass"
+                                                "{id.metadata().name}"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
-                                            div { class: "d", "OptiScaler.dll \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_sha256_verified\")} \u{00B7} 2.4 MB" }
+                                            div { class: "d", "OptiScaler.dll \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_sha256_verified\")} \u{00B7} ~6.4 MB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass"
+                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} {crate::core::addons::OPTISCALER_REPO_URL}"
                                             }
                                             div { class: "dim", style: "font-size:0.82em; margin-top:4px;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"addon_optiscaler_desc\")}"
@@ -2541,7 +2541,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2593,7 +2593,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2608,8 +2608,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_reshade_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v6.8.0".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v6.8.0".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2626,13 +2626,13 @@ pub fn App() -> Element {
                                                 "ReShade (Add-on Host Runtime)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
-                                            div { class: "d", "ReShade64.dll \u{00B7} v6.8.0 \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_full_addon_support\")} \u{00B7} 5.3 MB" }
+                                            div { class: "d", "ReShade64.dll \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_full_addon_support\")} \u{00B7} 5.3 MB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://reshade.me"
                                             }
@@ -2643,7 +2643,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2695,7 +2695,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2710,8 +2710,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_streamline_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v2.14.1".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v2.14.1".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2725,18 +2725,18 @@ pub fn App() -> Element {
                                         }
                                         div { class: "body",
                                             div { class: "t",
-                                                "NVIDIA Streamline Runtime"
+                                                "NVIDIA Streamline & Neural Rendering (DLSS-NR)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
-                                            div { class: "d", "sl.interposer.dll \u{00B7} v2.14.1 \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_streamline_interposer\")} \u{00B7} 1.2 MB" }
+                                            div { class: "d", "sl.interposer.dll + nvngx_dlssnr.dll \u{00B7} {crate::core::i18n::t(&current_lang.read(), \"meta_streamline_interposer\")} \u{00B7} ~224 MB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/yumlevi/renodx-dlss-installer"
+                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} {crate::core::addons::STREAMLINE_REPO_URL}"
                                             }
                                             div { class: "dim", style: "font-size:0.82em; margin-top:4px;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"addon_streamline_desc\")}"
@@ -2745,7 +2745,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2797,7 +2797,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -2812,8 +2812,8 @@ pub fn App() -> Element {
                                 let is_cached = crate::core::addons::is_dgvoodoo_cached();
                                 let u_info = addon_updates.read().get(&id).cloned();
                                 let has_update = u_info.as_ref().map(|u| u.update_available && u.current_version.is_some()).unwrap_or(false);
-                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_else(|| "v2.87.5".to_string());
-                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).unwrap_or_else(|| crate::core::addons::get_local_addon_version(id).unwrap_or_else(|| "v2.87.5".to_string()));
+                                let latest_tag = u_info.as_ref().and_then(|u| u.latest_version.clone()).unwrap_or_default();
+                                let current_tag = u_info.as_ref().and_then(|u| u.current_version.clone()).or_else(|| crate::core::addons::get_local_addon_version(id)).unwrap_or_default();
                                 let is_updating = *active_updating_addon.read() == Some(id) || (*addon_update_batch_active.read() && has_update);
 
                                 rsx! {
@@ -2830,13 +2830,13 @@ pub fn App() -> Element {
                                                 "dgVoodoo2 (Legacy DirectX Wrapper)"
                                                 if has_update {
                                                     span { class: "tag update-avail", "{current_tag} \u{2192} {latest_tag}" }
-                                                } else if is_cached {
+                                                } else if is_cached && !current_tag.is_empty() {
                                                     span { class: "tag", "{current_tag}" }
-                                                } else {
+                                                } else if !latest_tag.is_empty() {
                                                     span { class: "tag", "{latest_tag}" }
                                                 }
                                             }
-                                            div { class: "d", "d3d9.dll / d3d8.dll \u{00B7} v2.87.5 \u{00B7} D3D -> D3D11 Translation \u{00B7} 1.4 MB" }
+                                            div { class: "d", "d3d9.dll / d3d8.dll \u{00B7} D3D -> D3D11 Translation \u{00B7} 1.4 MB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/dege-diosg/dgVoodoo2"
                                             }
@@ -2847,7 +2847,7 @@ pub fn App() -> Element {
                                         div { class: "addon-status-core", style: "display:flex; align-items:center; gap:8px;",
                                             if is_updating {
                                                 span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;",
-                                                    span { class: "spin-icon", "?" }
+                                                    span { class: "spin-icon" }
                                                     "{status_percent.read():.0}%"
                                                 }
                                             } else if has_update {
@@ -2899,7 +2899,7 @@ pub fn App() -> Element {
                                                     if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
                                                         "{status_percent.read():.0}% ..."
                                                     } else {
-                                                        "? {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
+                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
                                                     }
                                                 }
                                             }
@@ -3278,9 +3278,13 @@ pub fn App() -> Element {
                                                 let stats = crate::core::steamart::cleanup_unused_art(&g_list, &s.hidden, &s.posters);
                                                 let reclaimed_mb = stats.bytes_reclaimed as f64 / (1024.0 * 1024.0);
                                                 let toast = if stats.files_removed > 0 {
-                                                    format!("Cleaned {} orphaned art files ({:.2} MB reclaimed)", stats.files_removed, reclaimed_mb)
+                                                    crate::core::i18n::t_params(
+                                                        &current_lang.read(),
+                                                        "toast_cleaned_art",
+                                                        &[&stats.files_removed.to_string(), &format!("{:.2}", reclaimed_mb)],
+                                                    )
                                                 } else {
-                                                    "Artwork cache is already clean (0 orphaned files)".to_string()
+                                                    crate::core::i18n::t(&current_lang.read(), "toast_art_already_clean").to_string()
                                                 };
                                                 copy_toast_text.set(toast);
                                                 *toast_generation.write() += 1;
@@ -3306,7 +3310,7 @@ pub fn App() -> Element {
                                         title: "{crate::core::i18n::t(&current_lang.read(), \"settings_add_folder\")}",
                                         onclick: move |_| {
                                             spawn(async move {
-                                                if let Some(handle) = rfd::AsyncFileDialog::new().set_title("Scan this folder for games").pick_folder().await {
+                                                if let Some(handle) = rfd::AsyncFileDialog::new().set_title(crate::core::i18n::t(&current_lang.peek(), "dlg_scan_folder")).pick_folder().await {
                                                     let folder = handle.path().to_path_buf();
                                                     let folder_games = tokio::task::spawn_blocking({
                                                         let folder = folder.clone();
@@ -3402,7 +3406,7 @@ pub fn App() -> Element {
                                             games.set(deduped);
                                             hidden_count.set(0);
                                             crate::core::logger::info("library", &format!("Restored {} hidden game(s)", count));
-                                            copy_toast_text.set(format!("Restored {} hidden game(s)", count));
+                                            copy_toast_text.set(crate::core::i18n::t_param(&current_lang.read(), "toast_unhide_games", &count.to_string()));
                                             *toast_generation.write() += 1;
                                             copy_toast.set(true);
                                         },
@@ -3905,12 +3909,6 @@ pub fn App() -> Element {
                                             span { class: "v on", "{reshade_label}" }
                                         } else {
                                             span { class: "v", "{reshade_label}" }
-                                        }
-                                    }
-                                    if target_game.optiscaler_installed {
-                                        div { class: "spec",
-                                            span { class: "k", "{crate::core::i18n::t(&current_lang.read(), \"spec_presr_passes\")}" }
-                                            span { class: "v", "{target_game.optiscaler_passes}x" }
                                         }
                                     }
                                 }
@@ -5047,9 +5045,10 @@ pub fn launch_game(game: &GameEntry) {
 
 pub fn pick_and_set_cover(dir: &std::path::Path, mut games: Signal<Vec<GameEntry>>) {
     let dir = dir.to_path_buf();
+    let lang = crate::core::state::load_state().lang;
     spawn(async move {
         if let Some(handle) = rfd::AsyncFileDialog::new()
-            .set_title("Select Cover Image")
+            .set_title(crate::core::i18n::t(&lang, "dlg_select_cover_image"))
             .add_filter("Images (*.jpg, *.png, *.webp)", &["jpg", "jpeg", "png", "webp", "bmp"])
             .pick_file()
             .await

@@ -668,7 +668,9 @@ pub fn scan_game_directory<P: AsRef<Path>>(dir: P) -> Option<GameEntry> {
                 || d.join("reshade-shaders").is_dir()
         });
         let has_native = search_dirs.into_iter().flatten().any(|d| {
-            d.join("renodx-dlss5.addon64").is_file()
+            d.join("renodx-dlss.addon64").is_file()
+                || d.join("renodx-dlss5.addon64").is_file()
+                || d.join("dlss-mip-fix.addon64").is_file()
                 || d.join("dlss5-d3d12-fix.addon64").is_file()
         });
         if has_feeder {

@@ -86,6 +86,211 @@ pub fn extract_reshade_from_setup(setup_path: &Path, comp_root: &Path) -> Result
     }
 }
 
+/// Selectively extracts 64-bit Streamline runtime DLLs from the official NVIDIA Streamline SDK zip.
+/// Only extracts files in `bin/x64/` (ignoring `development/`, docs, headers, and debug symbols).
+pub fn extract_streamline_from_sdk(file: fs::File, out_dir: &Path) -> Result<(), String> {
+    let _ = fs::create_dir_all(out_dir);
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Failed to read Streamline SDK zip: {}", e))?;
+
+    let has_bin_x64 = (0..archive.len()).any(|i| {
+        if let Ok(entry) = archive.by_index(i) {
+            let n = entry.name().replace('\\', "/");
+            n.contains("bin/x64/") && !n.contains("/development/") && n.to_lowercase().ends_with(".dll")
+        } else {
+            false
+        }
+    });
+
+    let mut extracted_count = 0;
+    for i in 0..archive.len() {
+        let mut f = archive.by_index(i).map_err(|e| format!("Zip entry error: {}", e))?;
+        if f.is_dir() {
+            continue;
+        }
+        let name = f.name().to_string();
+        let normalized = name.replace('\\', "/");
+
+        let matches = if has_bin_x64 {
+            normalized.contains("bin/x64/") && !normalized.contains("/development/") && !normalized.contains("/debug/")
+        } else {
+            true
+        };
+
+        if matches {
+            if let Some(file_name) = Path::new(&normalized).file_name().and_then(|s| s.to_str()) {
+                let lower = file_name.to_lowercase();
+                if !lower.ends_with(".dll") {
+                    continue;
+                }
+                // Only take Streamline / DLSS DLLs: sl.*, nvngx_dlss*.dll
+                if lower.starts_with("sl.") || lower.starts_with("nvngx_dlss") {
+                    let outpath = out_dir.join(file_name);
+                    let mut outfile = fs::File::create(&outpath).map_err(|e| format!("Failed to create {}: {}", outpath.display(), e))?;
+                    std::io::copy(&mut f, &mut outfile).map_err(|e| format!("Extraction error for {}: {}", file_name, e))?;
+                    extracted_count += 1;
+                }
+            }
+        }
+    }
+
+    if extracted_count == 0 {
+        return Err("No Streamline runtime DLLs found in archive".to_string());
+    }
+    Ok(())
+}
+
+/// Cleans stale directories, older versions, and temporary archives for a specific add-on.
+pub fn clean_stale_addon_cache(comp_root: &Path, id: AddonId, keep_target: Option<&Path>) {
+    let canonical_keep = keep_target.and_then(|p| p.canonicalize().ok()).or_else(|| keep_target.map(|p| p.to_path_buf()));
+
+    if let Ok(entries) = fs::read_dir(comp_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_dir = path.is_dir();
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let lower_name = file_name.to_lowercase();
+
+            // Never delete the keep target
+            if let Some(ref keep) = canonical_keep {
+                if path == *keep || path.canonicalize().ok().as_ref() == Some(keep) {
+                    continue;
+                }
+            }
+
+            let should_delete = match id {
+                AddonId::RenoDxMfgUnlock => {
+                    (is_dir && lower_name.starts_with("mfg-unlock-"))
+                        || (!is_dir && lower_name.starts_with("mfg-unlock-") && lower_name.ends_with(".zip"))
+                        || (!is_dir && lower_name.starts_with("renodx-mfgunlock") && lower_name.ends_with(".zip"))
+                }
+                AddonId::Streamline => {
+                    if is_dir && lower_name.starts_with("streamline-") {
+                        let target_streamline = comp_root.join("streamline");
+                        let sub_dlssnr = path.join("streamline").join("nvngx_dlssnr.dll");
+                        let direct_dlssnr = path.join("nvngx_dlssnr.dll");
+                        if (sub_dlssnr.is_file() || direct_dlssnr.is_file()) && !target_streamline.join("nvngx_dlssnr.dll").is_file() {
+                            let _ = fs::create_dir_all(&target_streamline);
+                            let src = if sub_dlssnr.is_file() { sub_dlssnr } else { direct_dlssnr };
+                            let _ = fs::copy(&src, target_streamline.join("nvngx_dlssnr.dll"));
+                        }
+                    }
+                    (is_dir && (lower_name.starts_with("streamline-") || (lower_name == "streamline" && keep_target.is_some() && canonical_keep.as_ref() != Some(&path))))
+                        || (!is_dir && lower_name.starts_with("streamline") && lower_name.ends_with(".zip"))
+                }
+                AddonId::Dlss5Feeder => {
+                    (is_dir && (lower_name.starts_with("dlss5-feeder-") || lower_name == "dlss5-feeder"))
+                        || (!is_dir && lower_name.starts_with("dlss5-feeder") && lower_name.ends_with(".zip"))
+                }
+                AddonId::OptiScaler => {
+                    (is_dir && lower_name.starts_with("optiscaler-"))
+                        || (!is_dir && lower_name.starts_with("optiscaler") && lower_name.ends_with(".zip"))
+                }
+                AddonId::Rtx40Mfg => {
+                    (is_dir && (lower_name.starts_with("rtxmfg-") || lower_name.starts_with("rtx40mfg-")))
+                        || (!is_dir && (lower_name.starts_with("rtxmfg") || lower_name.starts_with("rtx40mfg")) && lower_name.ends_with(".zip"))
+                }
+                AddonId::DgVoodoo => {
+                    !is_dir && lower_name.starts_with("dgvoodoo2") && lower_name.ends_with(".zip")
+                }
+                AddonId::ReShade => {
+                    !is_dir && lower_name.starts_with("reshade_setup") && lower_name.ends_with(".exe")
+                }
+                AddonId::RenoDxDlss5 => {
+                    (is_dir && (lower_name == "renodx-dlss5" || (lower_name == "renodx-dlss" && keep_target.is_some() && canonical_keep.as_ref() != Some(&path))))
+                        || (!is_dir && (lower_name.starts_with("renodx-dlss5") || lower_name.starts_with("renodx-dlss")) && lower_name.ends_with(".zip"))
+                }
+                AddonId::DlssMipFix => {
+                    is_dir && lower_name == "dlss5-d3d12-fix"
+                }
+            };
+
+            if should_delete {
+                if is_dir {
+                    let _ = fs::remove_dir_all(&path);
+                } else {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+}
+
+/// Sweeps all add-on components on application startup to purge any orphaned directories or archives.
+pub fn clean_all_stale_addon_caches(comp_root: &Path) {
+    // 1. RenoDX MFG Unlock: preserve highest version or mfg-unlock-1.0
+    let mfg_active = {
+        let mut candidates = Vec::new();
+        if let Ok(entries) = fs::read_dir(comp_root) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if e.path().is_dir() && name.starts_with("mfg-unlock-") && e.path().join("renodx-mfgunlock.addon64").is_file() {
+                    candidates.push(e.path());
+                }
+            }
+        }
+        candidates.sort_by(|a, b| b.cmp(a));
+        candidates.into_iter().next().unwrap_or_else(|| comp_root.join("mfg-unlock-1.0"))
+    };
+    clean_stale_addon_cache(comp_root, AddonId::RenoDxMfgUnlock, Some(&mfg_active));
+
+    // 2. Streamline: preserve components/streamline
+    let streamline_target = comp_root.join("streamline");
+    let legacy_dlssnr = comp_root.join("streamline-2.14.1").join("streamline").join("nvngx_dlssnr.dll");
+    if legacy_dlssnr.is_file() && !streamline_target.join("nvngx_dlssnr.dll").is_file() {
+        let _ = fs::create_dir_all(&streamline_target);
+        let _ = fs::copy(&legacy_dlssnr, streamline_target.join("nvngx_dlssnr.dll"));
+    }
+    clean_stale_addon_cache(comp_root, AddonId::Streamline, Some(&streamline_target));
+
+    // 3. DLSS 5 Feeder: preserve highest version
+    let feeder_active = {
+        let mut candidates = Vec::new();
+        if let Ok(entries) = fs::read_dir(comp_root) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if e.path().is_dir() && name.starts_with("DLSS5-Feeder-") && e.path().join("dlss5-feed.addon64").is_file() {
+                    candidates.push(e.path());
+                }
+            }
+        }
+        candidates.sort_by(|a, b| b.cmp(a));
+        candidates.into_iter().next()
+    };
+    clean_stale_addon_cache(comp_root, AddonId::Dlss5Feeder, feeder_active.as_deref());
+
+    // 4. OptiScaler: preserve highest version
+    let opti_active = {
+        let mut candidates = Vec::new();
+        if let Ok(entries) = fs::read_dir(comp_root) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if e.path().is_dir() && name.starts_with("OptiScaler-") && e.path().join("OptiScaler.dll").is_file() {
+                    candidates.push(e.path());
+                }
+            }
+        }
+        candidates.sort_by(|a, b| b.cmp(a));
+        candidates.into_iter().next()
+    };
+    clean_stale_addon_cache(comp_root, AddonId::OptiScaler, opti_active.as_deref());
+
+    // 5. RTX40MFG: preserve mfg-standalone
+    let rtxmfg_active = comp_root.join("mfg-standalone");
+    clean_stale_addon_cache(comp_root, AddonId::Rtx40Mfg, Some(&rtxmfg_active));
+
+    // 6. dgVoodoo2: preserve dgvoodoo
+    clean_stale_addon_cache(comp_root, AddonId::DgVoodoo, Some(&comp_root.join("dgvoodoo")));
+
+    // 7. ReShade
+    clean_stale_addon_cache(comp_root, AddonId::ReShade, None);
+
+    // 8. RenoDx Engine: preserve renodx-dlss
+    clean_stale_addon_cache(comp_root, AddonId::RenoDxDlss5, Some(&comp_root.join("renodx-dlss")));
+
+    // 9. D3D12 Mip Fix: preserve dlss-mip-fix
+    clean_stale_addon_cache(comp_root, AddonId::DlssMipFix, Some(&comp_root.join("dlss-mip-fix")));
+}
+
 /// Downloads, installs, or updates a single core add-on package
 pub async fn install_or_update_addon<F>(
     id: AddonId,
@@ -108,20 +313,55 @@ where
             if !force && is_renodx_engine_cached() {
                 return Ok(());
             }
-            let dl_url = info.download_url.unwrap_or_else(|| RENODX_DLSS5_URL.to_string());
-            let renodx_dir = comp_root.join("renodx-dlss5");
+            let renodx_dir = comp_root.join("renodx-dlss");
             let _ = fs::create_dir_all(&renodx_dir);
-            let target_dest = renodx_dir.join("renodx-dlss5.addon64");
-            download_file_with_progress(
-                &dl_url,
-                &target_dest,
-                "",
-                &format!("RenoDX DLSS 5 ({})", target_tag),
-                "renodx",
-                &mut progress_fn,
-            ).await?;
+            let target_dest = renodx_dir.join("renodx-dlss.addon64");
+
+            // Check local build / repository candidate files first before downloading
+            let mut local_candidates = vec![
+                PathBuf::from("external_assets/renodx-dlss.addon64"),
+                PathBuf::from("dist/renodx-dlss.addon64"),
+                PathBuf::from("target/release/renodx-dlss.addon64"),
+                PathBuf::from("target/debug/renodx-dlss.addon64"),
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external_assets").join("renodx-dlss.addon64"),
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist").join("renodx-dlss.addon64"),
+            ];
+            if let Ok(exe_p) = std::env::current_exe() {
+                if let Some(exe_dir) = exe_p.parent() {
+                    local_candidates.push(exe_dir.join("dist").join("renodx-dlss.addon64"));
+                    local_candidates.push(exe_dir.join("renodx-dlss.addon64"));
+                    local_candidates.push(exe_dir.join("external_assets").join("renodx-dlss.addon64"));
+                    if let Some(parent) = exe_dir.parent() {
+                        local_candidates.push(parent.join("external_assets").join("renodx-dlss.addon64"));
+                        local_candidates.push(parent.join("dist").join("renodx-dlss.addon64"));
+                    }
+                }
+            }
+            let mut copied = false;
+            for cand in &local_candidates {
+                if cand.is_file() {
+                    if fs::copy(cand, &target_dest).is_ok() {
+                        copied = true;
+                        break;
+                    }
+                }
+            }
+
+            if !copied {
+                let dl_url = info.download_url.unwrap_or_else(|| RENODX_DLSS_URL.to_string());
+                download_file_with_progress(
+                    &dl_url,
+                    &target_dest,
+                    RENODX_DLSS_SHA256,
+                    &format!("RenoDX DLSS ({})", target_tag),
+                    "renodx",
+                    &mut progress_fn,
+                ).await?;
+            }
             crate::core::state::log_message(&format!("@{{log_addon_download_success|{}|{}}}", id.name(), target_tag));
-            let _ = record_addon_version(AddonId::RenoDxDlss5, &target_tag);
+            let tag_to_record = target_tag.clone();
+            clean_stale_addon_cache(&comp_root, AddonId::RenoDxDlss5, Some(&renodx_dir));
+            let _ = record_addon_version(AddonId::RenoDxDlss5, &tag_to_record);
         }
         AddonId::DlssMipFix => {
             if !force && is_dlss5_d3d12_fix_cached() {
@@ -161,6 +401,7 @@ where
                     &mut progress_fn,
                 ).await?;
             }
+            clean_stale_addon_cache(&comp_root, AddonId::DlssMipFix, Some(&fix_dir));
             let _ = record_addon_version(AddonId::DlssMipFix, &target_tag);
         }
         AddonId::RenoDxMfgUnlock => {
@@ -180,6 +421,7 @@ where
                 &mut progress_fn,
             ).await?;
             crate::core::state::log_message(&format!("@{{log_addon_download_success|{}|{}}}", id.name(), target_tag));
+            clean_stale_addon_cache(&comp_root, AddonId::RenoDxMfgUnlock, Some(&mfg_dir));
             let _ = record_addon_version(AddonId::RenoDxMfgUnlock, &target_tag);
         }
         AddonId::Dlss5Feeder => {
@@ -212,20 +454,7 @@ where
 
             crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), target_tag));
 
-            // Purge older DLSS5-Feeder-* folders from comp_root to prevent stale accumulation
-            if let Ok(entries) = fs::read_dir(&comp_root) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_dir() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with("DLSS5-Feeder-") && p != feeder_dir {
-                            if fs::remove_dir_all(&p).is_ok() {
-                                crate::core::state::log_message(&format!("@{{log_addon_cache_cleaned|{}}}", name));
-                            }
-                        }
-                    }
-                }
-            }
+            clean_stale_addon_cache(&comp_root, AddonId::Dlss5Feeder, Some(&feeder_dir));
 
             let mut dummy_log = Vec::new();
             ensure_feeder_components(&mut dummy_log).await?;
@@ -261,6 +490,7 @@ where
             }
 
             crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), tag));
+            clean_stale_addon_cache(&comp_root, AddonId::Rtx40Mfg, Some(&mfg_dir));
             let _ = record_addon_version(AddonId::Rtx40Mfg, &tag);
         }
         AddonId::OptiScaler => {
@@ -269,14 +499,14 @@ where
             }
             let (dl_url, tag) = resolve_latest_optiscaler_mfg().await;
             let tag_clean = tag.trim_start_matches('v');
-            let opti_dir = comp_root.join(format!("OptiScaler-{}-rtx40-mfg", tag_clean));
+            let opti_dir = comp_root.join(format!("OptiScaler-{}-dlss5", tag_clean));
             let zip_path = comp_root.join("OptiScaler-latest.zip");
 
             download_file_with_progress(
                 &dl_url,
                 &zip_path,
                 "",
-                &format!("OptiScaler DLSS-NR ({})", tag),
+                &format!("OptiScaler DLSS 5 ({})", tag),
                 "optiscaler",
                 &mut progress_fn,
             ).await?;
@@ -289,26 +519,29 @@ where
                 let _ = tokio::task::spawn_blocking(move || {
                     let _ = extract_zip(file, &opti_dir_c);
                     let _ = fs::remove_file(&zip_path_c);
+
+                    // Auto-flatten nested subfolders (e.g. DLSS5-Optimised) if OptiScaler.dll is inside
+                    let candidate_subdirs = ["DLSS5-Optimised", "OptiScaler"];
+                    for sub_name in &candidate_subdirs {
+                        let sub_path = opti_dir_c.join(sub_name);
+                        if sub_path.is_dir() && sub_path.join("OptiScaler.dll").is_file() {
+                            if let Ok(entries) = fs::read_dir(&sub_path) {
+                                for entry in entries.flatten() {
+                                    let src = entry.path();
+                                    let dest = opti_dir_c.join(entry.file_name());
+                                    let _ = fs::rename(&src, &dest);
+                                }
+                            }
+                            let _ = fs::remove_dir_all(&sub_path);
+                            break;
+                        }
+                    }
                 }).await;
             }
 
             crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), tag));
 
-            // Clean older OptiScaler-* directories from comp_root
-            if let Ok(entries) = fs::read_dir(&comp_root) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_dir() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with("OptiScaler-") && p != opti_dir {
-                            if fs::remove_dir_all(&p).is_ok() {
-                                crate::core::state::log_message(&format!("@{{log_addon_cache_cleaned|{}}}", name));
-                            }
-                        }
-                    }
-                }
-            }
-
+            clean_stale_addon_cache(&comp_root, AddonId::OptiScaler, Some(&opti_dir));
             let _ = record_addon_version(AddonId::OptiScaler, &tag);
         }
         AddonId::ReShade => {
@@ -337,36 +570,96 @@ where
 
             extract_res?;
             crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), "v6.8.0"));
+            clean_stale_addon_cache(&comp_root, AddonId::ReShade, None);
             let _ = record_addon_version(AddonId::ReShade, "v6.8.0");
         }
         AddonId::Streamline => {
             if !force && is_streamline_cached() {
                 return Ok(());
             }
-            let streamline_dir = comp_root.join("streamline-2.14.1");
-            let zip_path = comp_root.join("streamline.zip");
-            download_file_with_progress(
-                STREAMLINE_ZIP_URL,
-                &zip_path,
-                "",
-                "Streamline Runtime v2.14.1",
-                "streamline",
-                &mut progress_fn,
-            ).await?;
+            let streamline_dir = comp_root.join("streamline");
+            let zip_path = comp_root.join("streamline-download.zip");
 
-            crate::core::state::log_message(&format!("@{{log_addon_download_success|{}|{}}}", id.name(), "v2.14.1"));
+            let mut local_search_dirs = vec![
+                PathBuf::from("external_assets"),
+                PathBuf::from("dist"),
+                PathBuf::from("target/release"),
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external_assets"),
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"),
+            ];
+            if let Ok(exe_p) = std::env::current_exe() {
+                if let Some(exe_dir) = exe_p.parent() {
+                    local_search_dirs.push(exe_dir.join("dist"));
+                    local_search_dirs.push(exe_dir.join("external_assets"));
+                    if let Some(parent) = exe_dir.parent() {
+                        local_search_dirs.push(parent.join("external_assets"));
+                        local_search_dirs.push(parent.join("dist"));
+                    }
+                }
+            }
+
+            let mut copied = false;
+            // 1. If download_url was resolved to a local staged file path, copy directly
+            if let Some(ref dl_url) = info.download_url {
+                let local_path = PathBuf::from(dl_url);
+                if local_path.is_file() {
+                    if fs::copy(&local_path, &zip_path).is_ok() {
+                        copied = true;
+                    }
+                }
+            }
+
+            // 2. Otherwise scan local search directories for streamline-*.zip
+            if !copied {
+                for dir in &local_search_dirs {
+                    if let Ok(entries) = fs::read_dir(dir) {
+                        for entry in entries.flatten() {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if name.starts_with("streamline-") && name.ends_with(".zip") {
+                                if fs::copy(entry.path(), &zip_path).is_ok() {
+                                    copied = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if copied {
+                        break;
+                    }
+                }
+            }
+
+            // 3. Fallback to network download if no local candidate was found
+            if !copied {
+                let dl_url = info.download_url.ok_or_else(|| {
+                    "Streamline runtime bundle not found in GitHub releases or local search paths".to_string()
+                })?;
+                download_file_with_progress(
+                    &dl_url,
+                    &zip_path,
+                    "",
+                    &format!("Streamline Runtime ({})", target_tag),
+                    "streamline",
+                    &mut progress_fn,
+                ).await?;
+                crate::core::state::log_message(&format!("@{{log_addon_download_success|{}|{}}}", id.name(), target_tag));
+            }
 
             if let Ok(file) = fs::File::open(&zip_path) {
                 let streamline_dir_c = streamline_dir.clone();
                 let zip_path_c = zip_path.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    let _ = extract_zip(file, &streamline_dir_c);
+                let extract_res = tokio::task::spawn_blocking(move || {
+                    let r = extract_streamline_from_sdk(file, &streamline_dir_c);
                     let _ = fs::remove_file(&zip_path_c);
-                }).await;
+                    r
+                }).await.map_err(|e| format!("Streamline extraction task error: {}", e))?;
+                extract_res?;
             }
 
-            crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), "v2.14.1"));
-            let _ = record_addon_version(AddonId::Streamline, "v2.14.1");
+            clean_stale_addon_cache(&comp_root, AddonId::Streamline, Some(&streamline_dir));
+
+            crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), target_tag));
+            let _ = record_addon_version(AddonId::Streamline, &target_tag);
         }
         AddonId::DgVoodoo => {
             if !force && is_dgvoodoo_cached() {
@@ -437,6 +730,7 @@ where
                 return Err(format!("dgVoodoo2 extraction error: {}", e));
             }
             crate::core::state::log_message(&format!("@{{log_addon_unpack_success|{}|{}}}", id.name(), target_tag));
+            clean_stale_addon_cache(&comp_root, AddonId::DgVoodoo, Some(&comp_root.join("dgvoodoo")));
             let _ = record_addon_version(AddonId::DgVoodoo, &target_tag);
         }
     }
@@ -481,6 +775,9 @@ pub async fn ensure_mandatory_components_cached_with_progress<F>(mut progress_fn
 where
     F: FnMut(DownloadProgress),
 {
+    let comp_root = get_components_root();
+    clean_all_stale_addon_caches(&comp_root);
+
     let total_steps = ALL_REFERENCED_ADDONS.len() as f32;
     let mut errors = Vec::new();
 

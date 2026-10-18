@@ -288,6 +288,7 @@ pub fn is_optiscaler_cached() -> bool {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             roots.push(parent.join("components"));
+            roots.push(parent.join("data").join("components"));
         }
     }
     for root in roots {
@@ -297,8 +298,26 @@ pub fn is_optiscaler_cached() -> bool {
         if let Ok(entries) = fs::read_dir(&root) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.is_dir() && p.join("OptiScaler.dll").is_file() {
-                    return true;
+                if p.is_dir() {
+                    if p.join("OptiScaler.dll").is_file() {
+                        return true;
+                    }
+                    // Auto-heal nested directory if archive extracted into DLSS5-Optimised or OptiScaler
+                    let candidate_subdirs = ["DLSS5-Optimised", "OptiScaler"];
+                    for sub_name in &candidate_subdirs {
+                        let sub_p = p.join(sub_name);
+                        if sub_p.is_dir() && sub_p.join("OptiScaler.dll").is_file() {
+                            if let Ok(sub_entries) = fs::read_dir(&sub_p) {
+                                for se in sub_entries.flatten() {
+                                    let _ = fs::rename(se.path(), p.join(se.file_name()));
+                                }
+                            }
+                            let _ = fs::remove_dir_all(&sub_p);
+                            if p.join("OptiScaler.dll").is_file() {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -312,11 +331,20 @@ pub fn is_streamline_cached() -> bool {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             roots.push(parent.join("components"));
+            roots.push(parent.join("data").join("components"));
         }
     }
     for root in roots {
-        let streamline_dir = root.join("streamline-2.14.1").join("streamline");
-        if streamline_dir.join("sl.interposer.dll").is_file() && streamline_dir.join("sl.common.dll").is_file() {
+        let streamline_dir = root.join("streamline");
+        if streamline_dir.join("sl.interposer.dll").is_file()
+            && streamline_dir.join("sl.common.dll").is_file()
+        {
+            return true;
+        }
+        let alt_dir = root.join("streamline-2.14.1").join("streamline");
+        if alt_dir.join("sl.interposer.dll").is_file()
+            && alt_dir.join("sl.common.dll").is_file()
+        {
             return true;
         }
         if root.join("sl.interposer.dll").is_file() && root.join("sl.common.dll").is_file() {

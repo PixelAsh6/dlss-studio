@@ -51,9 +51,17 @@ pub fn generate_optiscaler_ini(
     let mut text = base_text.to_string();
 
     text = set_ini(&text, "DlssNr", "Enabled", if pre_sr { "true" } else { "false" });
+    text = set_ini(&text, "DlssNr", "PreSr", if pre_sr { "true" } else { "false" });
     text = set_ini(&text, "DlssNr", "RunBeforeSR", if pre_sr { "true" } else { "false" });
     text = set_ini(&text, "DlssNr", "Passes", &passes.to_string());
     text = set_ini(&text, "DlssNr", "ApplyAfterRR", "true");
+    text = set_ini(&text, "DlssNr", "CacheEnabled", "true");
+    text = set_ini(&text, "DlssNr", "CacheInterval", "2");
+    text = set_ini(&text, "DlssNr", "CacheAntiPop", "true");
+    text = set_ini(&text, "DlssNr", "WhitePointSource", "3");
+    text = set_ini(&text, "DlssNr", "NoiseAware", "true");
+    text = set_ini(&text, "DlssNr", "WorkingScale", "0.67");
+    text = set_ini(&text, "DlssNr", "JbuUpsample", "true");
     if pre_sr {
         text = set_ini(&text, "DlssNr", "Style", &nr_style.to_string());
     }
@@ -270,7 +278,7 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
         }
     }
 
-    // 6. Deploy verified Streamline 2.14.1 stack if game has Streamline 2.x
+    // 6. Deploy verified Streamline 2.14.1 stack if game has older Streamline 2.x, or preserve modern native runtime
     let existing_sl = [
         backup_dir.join("sl.interposer.dll"),
         mod_root.join("sl.interposer.dll"),
@@ -281,26 +289,28 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
 
     if let Some(target_sl) = existing_sl {
         if crate::core::pe::is_legacy_streamline_1x(&target_sl) {
-            log.push("[STREAMLINE] Legacy Streamline 1.x detected (exports slGetFeatureSettings) - preserving original game Streamline files to prevent 0xC0000005 export mismatch".to_string());
-        } else if let Some(streamline_src) = &payloads.streamline_dir {
-            if streamline_src.is_dir() {
-                let sl_files = [
-                    "sl.interposer.dll",
-                    "sl.common.dll",
-                    "sl.dlss_g.dll",
-                    "sl.reflex.dll",
-                    "sl.pcl.dll",
-                    "nvngx_dlssg.dll",
-                ];
-                for f in &sl_files {
-                    let src_file = streamline_src.join(f);
-                    if src_file.is_file() {
-                        let dest_file = mod_root.join(f);
-                        track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, &src_file, &dest_file, "streamline", &mut log)
-                            .map_err(|e| format!("Failed to deploy Streamline runtime {}: {}", f, e))?;
+            log.push("[STREAMLINE] Legacy Streamline 1.x detected - preserving original game Streamline files".to_string());
+        } else {
+            let sl_version = crate::core::pe::get_pe_version(&target_sl);
+            let ver_str = sl_version
+                .map(|(maj, min, pat)| format!("{}.{}.{}", maj, min, pat))
+                .unwrap_or_else(|| "2.x".to_string());
+            log.push(format!("[STREAMLINE] Game has native Streamline (v{}) - preserving native runtime", ver_str));
+
+            // If FrameGen unlock requested and nvngx_dlssg.dll not in mod_root, deploy nvngx_dlssg.dll if available
+            if opts.mfg_unlock {
+                let has_dlssg = mod_root.join("nvngx_dlssg.dll").is_file() || opts.game_dir.join("nvngx_dlssg.dll").is_file();
+                if !has_dlssg {
+                    if let Some(streamline_src) = &payloads.streamline_dir {
+                        let src_dlssg = streamline_src.join("nvngx_dlssg.dll");
+                        if src_dlssg.is_file() {
+                            let dest_dlssg = mod_root.join("nvngx_dlssg.dll");
+                            track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, &src_dlssg, &dest_dlssg, "streamline", &mut log)
+                                .map_err(|e| format!("Failed to deploy nvngx_dlssg.dll: {}", e))?;
+                            log.push("[MFG] Deployed nvngx_dlssg.dll for Frame Generation Unlock".to_string());
+                        }
                     }
                 }
-                log.push("[STREAMLINE] Deployed verified Streamline 2.14.1 stack to eliminate OTA ABI version conflicts".to_string());
             }
         }
     } else if opts.mfg_unlock {
@@ -311,7 +321,6 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
                     "sl.common.dll",
                     "sl.dlss_g.dll",
                     "sl.reflex.dll",
-                    "sl.pcl.dll",
                     "nvngx_dlssg.dll",
                 ];
                 let opti_sl_dir = mod_root.join("OptiScaler").join("streamline");
