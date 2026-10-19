@@ -37,6 +37,7 @@ async fn test_download_file_with_progress_success() {
             let _ = stream.write_all(response.as_bytes());
             let _ = stream.write_all(payload);
             let _ = stream.flush();
+            let _ = stream.shutdown(std::net::Shutdown::Both);
         }
     });
 

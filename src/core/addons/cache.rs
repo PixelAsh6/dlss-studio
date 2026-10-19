@@ -354,6 +354,16 @@ pub fn is_streamline_cached() -> bool {
     false
 }
 
+/// Checks whether modded nvngx_dlssnr.dll (DLSS Neural Rendering runtime) is cached on disk
+pub fn is_dlssnr_cached() -> bool {
+    crate::core::payloads::find_dlssnr_payload().is_some()
+}
+
+/// Checks whether both official NVIDIA Streamline runtime and modded nvngx_dlssnr.dll are present
+pub fn is_streamline_complete() -> bool {
+    is_streamline_cached() && is_dlssnr_cached()
+}
+
 /// Checks whether ReShade 6.8.0 runtime (both 64-bit and 32-bit) is cached on disk and verified as genuine PE binaries
 pub fn is_reshade_cached() -> bool {
     let is_valid_reshade = |p: &PathBuf| -> bool {

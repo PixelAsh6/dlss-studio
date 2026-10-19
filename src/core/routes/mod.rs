@@ -75,6 +75,9 @@ impl RouteFactory {
         opts: &DeployOptions,
         payloads: &PayloadBundle,
     ) -> Result<DeployResult, String> {
+        if payloads.nvngx_dlssnr_dll.as_ref().map(|p| !p.is_file()).unwrap_or(true) {
+            return Err("Deployment failed: nvngx_dlssnr.dll is missing from components/streamline/.".to_string());
+        }
         let route = Self::create_from_selection(backend, subroute)
             .ok_or_else(|| format!("Unknown route selection: backend='{}', subroute='{}'", backend, subroute))?;
         route.deploy(opts, payloads)
@@ -86,13 +89,8 @@ impl RouteFactory {
         subroute: &str,
         opts: &DeployOptions,
     ) -> Result<DeployResult, String> {
-        if backend.eq_ignore_ascii_case("optiscaler") {
-            optiscaler::deploy_optiscaler(opts)
-        } else if subroute.eq_ignore_ascii_case("native") {
-            native::deploy_native_dlss5(opts)
-        } else {
-            feeder::deploy_feeder(opts)
-        }
+        let payloads = PayloadBundle::from_system()?;
+        Self::dispatch_deploy(backend, subroute, opts, &payloads)
     }
 }
 

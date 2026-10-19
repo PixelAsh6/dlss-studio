@@ -334,8 +334,11 @@ pub fn App() -> Element {
         }
     });
     let mut trigger_component_download = use_signal(|| 0usize);
-
-
+    let streamline_missing_at_start = !crate::core::addons::is_streamline_cached();
+    let mut show_streamline_guidance_modal = use_signal(move || streamline_missing_at_start);
+    let mut streamline_modal_downloading = use_signal(|| false);
+    let mut streamline_modal_progress = use_signal(|| 0.0f32);
+    let mut streamline_modal_msg = use_signal(|| String::new());
 
     use_future(move || {
         let _ = *trigger_component_download.read();
@@ -357,7 +360,7 @@ pub fn App() -> Element {
                 }).await;
 
                 is_downloading_components.set(false);
-                if crate::core::addons::are_all_mandatory_components_cached() {
+                if crate::core::addons::are_all_mandatory_components_cached() || res.is_ok() {
                     status_percent.set(100.0);
                     component_download_progress.set(None);
                     status_state.set(AppStatus::Ready);
@@ -2783,22 +2786,34 @@ pub fn App() -> Element {
                                                     "Update to {latest_tag}"
                                                 }
                                             } else if is_cached {
-                                                span { class: "tag accent", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px;",
-                                                    "\u{2713} {crate::core::i18n::t(&current_lang.read(), \"addon_core_badge\")}"
+                                                if crate::core::addons::is_dlssnr_cached() {
+                                                    span { class: "tag accent", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px;",
+                                                        "\u{2713} {crate::core::i18n::t(&current_lang.read(), \"addon_core_badge\")}"
+                                                    }
+                                                } else {
+                                                    span { class: "tag warn", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; background: rgba(245, 158, 11, 0.2); color: #f59e0b;",
+                                                        title: "nvngx_dlssnr.dll is missing",
+                                                        "\u{26A0} {crate::core::i18n::t(&current_lang.read(), \"addon_incomplete_badge\")}"
+                                                    }
+                                                }
+                                                button {
+                                                    class: "ghost sm",
+                                                    style: "font-size:0.75rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);",
+                                                    title: "View Streamline installation guidance and folder path",
+                                                    onclick: move |_| {
+                                                        show_streamline_guidance_modal.set(true);
+                                                    },
+                                                    "📁 {crate::core::i18n::t(&current_lang.read(), \"btn_streamline_setup_guide\")}"
                                                 }
                                             } else {
                                                 button {
                                                     class: "tag warn",
-                                                    style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; cursor: pointer; border: none; background: rgba(245, 158, 11, 0.2); color: #f59e0b;",
-                                                    title: crate::core::i18n::t(&current_lang.read(), "tooltip_retry_download"),
+                                                    style: "font-weight:600; font-size:0.75rem; padding: 4px 12px; border-radius: 6px; letter-spacing: 0.5px; cursor: pointer; border: none; background: rgba(245, 158, 11, 0.2); color: #f59e0b; display: inline-flex; align-items: center; gap: 4px;",
+                                                    title: crate::core::i18n::t(&current_lang.read(), "btn_setup_streamline"),
                                                     onclick: move |_| {
-                                                        *trigger_component_download.write() += 1;
+                                                        show_streamline_guidance_modal.set(true);
                                                     },
-                                                    if matches!(*status_state.read(), AppStatus::DownloadingComponents) {
-                                                        "{status_percent.read():.0}% ..."
-                                                    } else {
-                                                        "\u{21BB} {crate::core::i18n::t(&current_lang.read(), \"btn_retry_download\")}"
-                                                    }
+                                                    "⚡ {crate::core::i18n::t(&current_lang.read(), \"btn_setup_streamline\")}"
                                                 }
                                             }
                                         }
@@ -4204,6 +4219,10 @@ pub fn App() -> Element {
                                                                 if *is_busy.read() {
                                                                     return;
                                                                 }
+                                                                if !crate::core::addons::is_dlssnr_cached() {
+                                                                    show_streamline_guidance_modal.set(true);
+                                                                    return;
+                                                                }
                                                                 is_busy.set(true);
 
                                                                 let target_game = target_game.clone();
@@ -4987,6 +5006,219 @@ pub fn App() -> Element {
                     }
                 }
             }
+
+
+            // ---------------- STREAMLINE SETUP GUIDANCE MODAL ----------------
+            if *show_streamline_guidance_modal.read() {
+                {
+                    let comp_dir = crate::core::addons::get_components_root().join("streamline");
+                    let comp_dir_str = comp_dir.to_string_lossy().to_string();
+                    let is_dl = *streamline_modal_downloading.read();
+                    let dl_pct = *streamline_modal_progress.read();
+                    let dl_msg = streamline_modal_msg.read().clone();
+                    let comp_dir_for_open = comp_dir.clone();
+                    let comp_dir_for_copy = comp_dir_str.clone();
+
+                    rsx! {
+                    div {
+                        class: "overlay",
+                        style: "display:flex; justify-content:center; align-items:center; z-index:9998; overflow-y:auto; padding:20px 0;",
+                        onmousedown: move |e| e.stop_propagation(),
+                        onclick: move |_| {
+                            if !*streamline_modal_downloading.read() {
+                                show_streamline_guidance_modal.set(false);
+                            }
+                        },
+                        div {
+                            class: "glass pad",
+                            style: "width: 620px; max-width:92%; background: #16191f; border: 1px solid var(--line); border-radius: 12px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); position: relative;",
+                            onmousedown: move |e| e.stop_propagation(),
+                            onclick: move |e| e.stop_propagation(),
+
+                            // Header
+                            div { style: "display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 16px;",
+                                div {
+                                    h3 { style: "margin:0 0 6px 0; font-size:1.25rem; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px;",
+                                        span { style: "color:#f59e0b;", "⚡" }
+                                        "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_title\")}"
+                                    }
+                                    p { class: "dim", style: "margin:0; font-size:0.88rem; line-height:1.4;",
+                                        "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_subtitle\")}"
+                                    }
+                                }
+                                if !is_dl {
+                                    button {
+                                        class: "ghost sm",
+                                        style: "font-size:1.1rem; line-height:1; padding:4px 8px; border-radius:6px;",
+                                        onclick: move |_| show_streamline_guidance_modal.set(false),
+                                        "✕"
+                                    }
+                                }
+                            }
+
+                            // Option 1: Automatic Download from Cloudflare CDN
+                            div {
+                                style: "background: rgba(108, 193, 10, 0.08); border: 1px solid rgba(108, 193, 10, 0.25); border-radius: 10px; padding: 18px; margin-bottom: 20px;",
+                                div { style: "display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;",
+                                    b { style: "font-size:0.95rem; color: #a3e635; display:flex; align-items:center; gap:6px;",
+                                        "✓ {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_auto_title\")}"
+                                    }
+                                    span { class: "tag", style: "font-size:0.75rem; background:rgba(108, 193, 10, 0.2); color:#a3e635; border:none;", "Cloudflare CDN" }
+                                }
+                                p { style: "margin:0 0 14px 0; font-size:0.84rem; color:var(--text); opacity:0.85; line-height:1.4;",
+                                    "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_auto_desc\")}"
+                                }
+
+                                if is_dl {
+                                    div { style: "display:flex; flex-direction:column; gap:6px;",
+                                        div { style: "display:flex; justify-content:space-between; font-size:0.82rem; font-weight:600;",
+                                            span { "{dl_msg}" }
+                                            span { "{dl_pct:.0}%" }
+                                        }
+                                        div { class: "bar", style: "margin:0; height:6px;",
+                                            i { style: "width: {dl_pct}%; background: linear-gradient(90deg, #6cc10a, #8bc400);" }
+                                        }
+                                    }
+                                } else {
+                                    button {
+                                        class: "btn-primary",
+                                        style: "width:100%; padding:10px 16px; font-weight:600; font-size:0.9rem; border-radius:8px; display:flex; justify-content:center; align-items:center; gap:8px;",
+                                        onclick: move |_| {
+                                            streamline_modal_downloading.set(true);
+                                            streamline_modal_progress.set(0.0);
+                                            streamline_modal_msg.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_downloading").to_string());
+                                            spawn(async move {
+                                                let res = crate::core::addons::install_or_update_addon(crate::core::addons::AddonId::Streamline, true, |prog| {
+                                                    streamline_modal_progress.set(prog.percentage);
+                                                    if !prog.message.is_empty() {
+                                                        streamline_modal_msg.set(prog.message.clone());
+                                                    }
+                                                }).await;
+                                                streamline_modal_downloading.set(false);
+                                                match res {
+                                                    Ok(_) => {
+                                                        copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_verified_success").to_string());
+                                                        *toast_generation.write() += 1;
+                                                        copy_toast.set(true);
+                                                        let list = crate::core::addons::check_all_addon_updates_force().await;
+                                                        let mut map = std::collections::HashMap::new();
+                                                        for item in list { map.insert(item.id, item); }
+                                                        addon_updates.set(map);
+                                                        show_streamline_guidance_modal.set(false);
+                                                    }
+                                                    Err(e) => {
+                                                        streamline_modal_msg.set(format!("Error: {}", e));
+                                                    }
+                                                }
+                                            });
+                                        },
+                                        "⬇ {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_btn_download\")}"
+                                    }
+                                }
+                            }
+
+                            // Option 2: Manual Installation Instructions
+                            div {
+                                style: "background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 20px;",
+                                b { style: "display:block; font-size:0.95rem; margin-bottom: 6px; color:var(--text);",
+                                    "🛠 {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_manual_title\")}"
+                                }
+                                p { style: "margin:0 0 10px 0; font-size:0.84rem; color:var(--text); opacity:0.85; line-height:1.4;",
+                                    "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_manual_desc\")} "
+                                    a {
+                                        href: "https://discord.gg/renodx",
+                                        title: "https://discord.gg/renodx",
+                                        style: "color:var(--accent); text-decoration:underline; font-weight:600; cursor:pointer;",
+                                        onclick: move |evt| {
+                                            evt.prevent_default();
+                                            open_url("https://discord.gg/renodx");
+                                        },
+                                        "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_discord_link_text\")}"
+                                    }
+                                    "."
+                                }
+                                ul { style: "margin:0 0 12px 18px; padding:0; font-size:0.82rem; font-family:monospace; color:var(--text-bright); line-height:1.6;",
+                                    li { "sl.interposer.dll (Required Streamline interposer)" }
+                                    li { "sl.common.dll (Common Streamline runtime)" }
+                                    li { "sl.dlss.dll (DLSS Super Resolution dispatch)" }
+                                    li { "sl.dlss_g.dll (DLSS Frame Generation dispatch)" }
+                                    li {
+                                        b { "nvngx_dlssnr.dll" }
+                                        span { style: "color:var(--accent); font-weight:600;", " ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_nr_badge\")})" }
+                                    }
+                                }
+                                div { style: "margin-bottom:12px;",
+                                    span { style: "display:block; font-size:0.75rem; font-weight:600; text-transform:uppercase; opacity:0.6; margin-bottom:4px;",
+                                        "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_target_folder\")}"
+                                    }
+                                    div { style: "display:flex; align-items:center; gap:8px;",
+                                        code {
+                                            style: "flex:1; padding:7px 10px; background:rgba(0,0,0,0.4); border:1px solid var(--line); border-radius:6px; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text);",
+                                            "{comp_dir_str}"
+                                        }
+                                        button {
+                                            class: "ghost sm",
+                                            title: "Copy folder path",
+                                            onclick: move |_| {
+                                                copy_to_clipboard(&comp_dir_for_copy);
+                                                copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "toast_streamline_copied").to_string());
+                                                *toast_generation.write() += 1;
+                                                copy_toast.set(true);
+                                            },
+                                            "📋 {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_btn_copy_path\")}"
+                                        }
+                                        button {
+                                            class: "ghost sm",
+                                            title: "Open in Windows Explorer",
+                                            onclick: move |_| {
+                                                let _ = std::fs::create_dir_all(&comp_dir_for_open);
+                                                let _ = std::process::Command::new("explorer").arg(&comp_dir_for_open).spawn();
+                                            },
+                                            "📁 {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_btn_open_folder\")}"
+                                        }
+                                    }
+                                }
+
+                                div { style: "display:flex; justify-content:flex-end; gap:8px;",
+                                    button {
+                                        class: "glass-btn sm",
+                                        onclick: move |_| {
+                                            if crate::core::addons::is_streamline_complete() {
+                                                copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_verified_success").to_string());
+                                                *toast_generation.write() += 1;
+                                                copy_toast.set(true);
+                                                spawn(async move {
+                                                    let list = crate::core::addons::check_all_addon_updates_force().await;
+                                                    let mut map = std::collections::HashMap::new();
+                                                    for item in list { map.insert(item.id, item); }
+                                                    addon_updates.set(map);
+                                                });
+                                                show_streamline_guidance_modal.set(false);
+                                            } else {
+                                                copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_not_detected").to_string());
+                                                *toast_generation.write() += 1;
+                                                copy_toast.set(true);
+                                            }
+                                        },
+                                        "🔄 {crate::core::i18n::t(&current_lang.read(), \"modal_streamline_btn_verify\")}"
+                                    }
+                                }
+                            }
+
+                            // Footer Dismissal
+                            div { style: "display:flex; justify-content:flex-end;",
+                                button {
+                                    class: "ghost sm",
+                                    style: "opacity:0.8;",
+                                    onclick: move |_| show_streamline_guidance_modal.set(false),
+                                    "{crate::core::i18n::t(&current_lang.read(), \"modal_streamline_btn_dismiss\")}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
 
             // Toast feedback

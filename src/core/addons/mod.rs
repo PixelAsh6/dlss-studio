@@ -56,9 +56,9 @@ impl AddonId {
 pub use cache::{
     are_all_mandatory_components_cached, find_local_dgvoodoo_components,
     find_local_feeder_components, get_components_root, is_addon_cached,
-    is_dgvoodoo_cached, is_dlss5_d3d12_fix_cached, is_feeder_cached,
+    is_dgvoodoo_cached, is_dlss5_d3d12_fix_cached, is_dlssnr_cached, is_feeder_cached,
     is_mfg_addon_cached, is_optiscaler_cached, is_renodx_engine_cached,
-    is_reshade_cached, is_rtxmfg_cached, is_streamline_cached,
+    is_reshade_cached, is_rtxmfg_cached, is_streamline_cached, is_streamline_complete,
 };
 
 pub use catalog::{

@@ -786,6 +786,12 @@ where
             continue;
         }
 
+        // Streamline runtime bundle is managed via the dedicated Streamline Setup Guidance Modal
+        // or explicit user action, avoiding silent background multi-hundred megabyte download on fresh launch.
+        if id == AddonId::Streamline {
+            continue;
+        }
+
         let step_offset = idx as f32;
         let mut step_progress = |mut p: DownloadProgress| {
             p.percentage = ((step_offset * 100.0) + p.percentage) / total_steps;
@@ -798,7 +804,15 @@ where
         }
     }
 
-    if are_all_mandatory_components_cached() {
+    let core_ready = is_mfg_addon_cached()
+        && is_feeder_cached()
+        && is_renodx_engine_cached()
+        && is_dlss5_d3d12_fix_cached()
+        && is_rtxmfg_cached()
+        && is_optiscaler_cached()
+        && is_reshade_cached();
+
+    if core_ready && errors.is_empty() {
         progress_fn(DownloadProgress {
             is_downloading: false,
             component_name: String::new(),
@@ -808,7 +822,7 @@ where
             total_bytes: None,
             percentage: 100.0,
             stage: DownloadStage::Downloading,
-            message: "All mandatory components ready".to_string(),
+            message: "Core components ready".to_string(),
         });
         Ok(())
     } else {

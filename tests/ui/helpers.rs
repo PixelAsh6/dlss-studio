@@ -121,4 +121,9 @@ fn test_brand_badge_constant() {
     assert!(!BRAND_BADGE_WEBP.is_empty());
 }
 
+#[test]
+fn test_open_url_empty_noop() {
+    open_url("");
+}
+
 

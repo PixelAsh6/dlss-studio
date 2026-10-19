@@ -167,3 +167,54 @@ fn test_install_route_and_opti_reason_methods() {
     assert!(OptiReason::Unsupported.message().contains("64-bit"));
     assert!(OptiReason::NeedsDlss.message().contains("original DLSS"));
 }
+
+#[test]
+fn test_dispatch_deploy_gating_missing_nvngx_dlssnr_fails_across_all_routes() {
+    let opts = DeployOptions {
+        game_name: Some("Test Game".to_string()),
+        game_dir: PathBuf::from("C:\\Games\\Test"),
+        exe_path: PathBuf::from("C:\\Games\\Test\\game.exe"),
+        api: "DirectX 12".to_string(),
+        pre_sr: false,
+        passes: 1,
+        mfg_unlock: false,
+        mfg_multiplier: 1,
+        nr_style: 0,
+        nr_style_enabled: false,
+    };
+
+    let empty_payloads = dlss_studio::core::payloads::PayloadBundle {
+        optiscaler_dll: PathBuf::from("C:\\nonexistent\\OptiScaler.dll"),
+        optiscaler_ini: PathBuf::from("C:\\nonexistent\\OptiScaler.ini"),
+        optiscaler_dir: None,
+        nvngx_dlss_dll: None,
+        nvngx_dlssnr_dll: None, // Missing!
+        nvngx_snippet_dll: None,
+        rtxmfg_dll: None,
+        reshade64_dll: None,
+        reshade32_dll: None,
+        renodx_dlss5_addon: None,
+        dlss5_d3d12_fix_addon: None,
+        renodx_mfgunlock_addon: None,
+        streamline_dir: None,
+        feeder_components: None,
+        dgvoodoo: None,
+    };
+
+    let expected_err = "Deployment failed: nvngx_dlssnr.dll is missing from components/streamline/.";
+
+    let opti_res = RouteFactory::dispatch_deploy("optiscaler", "any", &opts, &empty_payloads);
+    assert_eq!(opti_res.unwrap_err(), expected_err);
+
+    let native_res = RouteFactory::dispatch_deploy("reshade", "native", &opts, &empty_payloads);
+    assert_eq!(native_res.unwrap_err(), expected_err);
+
+    let feeder_res = RouteFactory::dispatch_deploy("reshade", "feeder", &opts, &empty_payloads);
+    assert_eq!(feeder_res.unwrap_err(), expected_err);
+}
+
+#[test]
+fn test_is_dlssnr_cached_and_streamline_complete() {
+    let _ = dlss_studio::core::addons::is_dlssnr_cached();
+    let _ = dlss_studio::core::addons::is_streamline_complete();
+}
