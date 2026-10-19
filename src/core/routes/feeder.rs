@@ -461,14 +461,10 @@ pub fn deploy_feeder_with_bundle(opts: &DeployOptions, payloads: &PayloadBundle)
                 deployed_addon_stems.push(stem);
                 log.push(format!("[FEEDER-DLSS5] {} deployed for Streamline Neural Rendering", file_name));
 
-                let conflicting = ["renodx-dlss5.addon64", "renodx-dlss.addon64"];
-                for c in &conflicting {
-                    if *c != file_name {
-                        let stale = mod_root.join(c);
-                        if stale.is_file() {
-                            let _ = fs::remove_file(&stale);
-                        }
-                    }
+                let other_name = if file_name == "renodx-dlss.addon64" { "renodx-dlss5.addon64" } else { "renodx-dlss.addon64" };
+                let other_path = mod_root.join(other_name);
+                if other_path.is_file() {
+                    let _ = fs::remove_file(&other_path);
                 }
             }
         }
@@ -546,14 +542,10 @@ pub fn deploy_feeder_with_bundle(opts: &DeployOptions, payloads: &PayloadBundle)
                                 let dest_renodx = host64_dir.join(file_name);
                                 track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, renodx, &dest_renodx, "feeder-host-addon", &mut log)
                                     .map_err(|e| format!("Failed to copy {} to host64: {}", file_name, e))?;
-                                let conflicting = ["renodx-dlss5.addon64", "renodx-dlss.addon64"];
-                                for c in &conflicting {
-                                    if *c != file_name {
-                                        let stale = host64_dir.join(c);
-                                        if stale.is_file() {
-                                            let _ = fs::remove_file(&stale);
-                                        }
-                                    }
+                                let other_name = if file_name == "renodx-dlss.addon64" { "renodx-dlss5.addon64" } else { "renodx-dlss.addon64" };
+                                let other_path = host64_dir.join(other_name);
+                                if other_path.is_file() {
+                                    let _ = fs::remove_file(&other_path);
                                 }
                             }
                         }

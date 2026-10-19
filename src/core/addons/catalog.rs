@@ -40,6 +40,7 @@ pub const DLSS_NR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/l
 pub const CDN_BASE_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev";
 pub const RENODX_REPO_URL: &str = CDN_BASE_URL;
 pub const RENODX_DLSS_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev/renodx-dlss.addon64";
+pub const RENODX_DLSS_LATEST_TAG: &str = "v0.2026.1016.1704";
 pub const RENODX_DLSS_SHA256: &str = "";
 pub const RENODX_DLSS5_URL: &str = RENODX_DLSS_URL;
 pub const RENODX_DLSS5_SHA256: &str = RENODX_DLSS_SHA256;

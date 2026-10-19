@@ -21,6 +21,18 @@
 
 ---
 
+### 🔄 Priority-Based RenoDX Engine & Authentic PE Header Versioning
+
+- **Priority-Based Add-on Resolution**:
+  - Runtime component discovery prioritizes modern `renodx-dlss.addon64` (Priority 1) while seamlessly retaining backward compatibility with legacy `renodx-dlss5.addon64` (Priority 2 fallback) for existing installations.
+  - Automatically purges conflicting alternate add-on files in the target game directory upon deployment to ensure ReShade does not attempt dual hooks.
+- **Authentic PE Version Inspection & In-App Updates**:
+  - Inspects actual PE file headers directly from `.addon64` binaries (detecting `v0.2026.0827.2036` on legacy files vs `v0.2026.1016.1704` on modern builds) rather than relying on stale `"latest"` entries in the manifest.
+  - Older installations immediately show the `v0.2026.0827.2036 → v0.2026.1016.1704` upgrade path with a one-click `[ Update to v0.2026.1016.1704 ]` button in Settings > Add-ons.
+  - Directly resolves and downloads `renodx-dlss.addon64` (~3.2 MB) from high-speed Cloudflare R2 storage without GitHub API latency or rate limits.
+
+---
+
 ### ⚡ OptiScaler DLSS 5 v1.2.1 & Pre-SR Enhancements
 
 - **Skynizz OptiScaler DLSS 5 v1.2.1 Integration**:

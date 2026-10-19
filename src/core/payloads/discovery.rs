@@ -143,23 +143,29 @@ pub fn find_mfg_addon_payload() -> Option<PathBuf> {
     find_mfg_unlock_payload()
 }
 
-/// Discovers the path to renodx-dlss.addon64 or renodx-dlss5.addon64.
+/// Discovers the path to renodx-dlss.addon64 (Priority 1) or legacy renodx-dlss5.addon64 (Priority 2 fallback).
 pub fn find_renodx_dlss5_payload() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-
-    candidates.push(PathBuf::from("external_assets/renodx-dlss.addon64"));
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("external_assets").join("renodx-dlss.addon64"));
-
+    // Priority 1: Modern renodx-dlss.addon64 in components directory
     for root in get_component_roots() {
-        candidates.push(root.join("renodx-dlss").join("renodx-dlss.addon64"));
-        candidates.push(root.join("renodx-dlss.addon64"));
-        candidates.push(root.join("renodx-dlss5").join("renodx-dlss5.addon64"));
-        candidates.push(root.join("renodx-dlss5.addon64"));
+        let p_sub = root.join("renodx-dlss").join("renodx-dlss.addon64");
+        if p_sub.is_file() {
+            return Some(p_sub);
+        }
+        let p_root = root.join("renodx-dlss.addon64");
+        if p_root.is_file() {
+            return Some(p_root);
+        }
     }
 
-    for c in candidates {
-        if c.is_file() {
-            return Some(c);
+    // Priority 2: Legacy fallback renodx-dlss5.addon64 for older installs that have not updated yet
+    for root in get_component_roots() {
+        let legacy_sub = root.join("renodx-dlss5").join("renodx-dlss5.addon64");
+        if legacy_sub.is_file() {
+            return Some(legacy_sub);
+        }
+        let legacy_root = root.join("renodx-dlss5.addon64");
+        if legacy_root.is_file() {
+            return Some(legacy_root);
         }
     }
 

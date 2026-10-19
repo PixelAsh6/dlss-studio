@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use super::cache::{get_components_root, is_addon_cached};
-use super::catalog::{resolve_github_latest_asset, RENODX_DLSS_SHA256, RENODX_DLSS_URL};
+use super::catalog::{resolve_github_latest_asset, RENODX_DLSS_URL};
 use super::{AddonId, ALL_REFERENCED_ADDONS};
 use crate::core::pe::inspect_pe;
 
@@ -113,7 +113,7 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
 
     let manifest = load_version_manifest();
     if let Some(ver) = manifest.versions.get(&id_key(id)) {
-        if !ver.is_empty() {
+        if !ver.is_empty() && ver != "latest" {
             return Some(ver.clone());
         }
     }
@@ -128,23 +128,8 @@ pub fn get_local_addon_version(id: AddonId) -> Option<String> {
     for root in roots {
         let detected = match id {
             AddonId::RenoDxDlss5 => {
-                let candidates = [
-                    root.join("renodx-dlss").join("renodx-dlss.addon64"),
-                    root.join("renodx-dlss.addon64"),
-                    root.join("renodx-dlss5").join("renodx-dlss5.addon64"),
-                    root.join("renodx-dlss5.addon64"),
-                ];
-                let target_opt = candidates.into_iter().find(|p| p.is_file());
-                if let Some(target) = target_opt {
-                    if let Ok(hash) = crate::core::downloader::compute_sha256(&target) {
-                        if !RENODX_DLSS_SHA256.is_empty() && hash.eq_ignore_ascii_case(RENODX_DLSS_SHA256) {
-                            Some("v8.5".to_string())
-                        } else if let Some(pe) = inspect_pe(&target) {
-                            pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
-                        } else {
-                            None
-                        }
-                    } else if let Some(pe) = inspect_pe(&target) {
+                if let Some(target) = crate::core::payloads::discovery::find_renodx_payload() {
+                    if let Some(pe) = inspect_pe(&target) {
                         pe.version.map(|v| format!("v{}", v.trim_start_matches('v')))
                     } else {
                         None
@@ -424,13 +409,7 @@ pub async fn check_addon_update(id: AddonId) -> AddonVersionInfo {
     let current_ver = get_local_addon_version(id);
     let (latest_tag, dl_url): (Option<String>, Option<String>) = match id {
         AddonId::RenoDxDlss5 => {
-            if let Ok((url, tag)) = resolve_github_latest_asset("bookamp/dlss-studio", |name| {
-                name == "renodx-dlss.addon64" || name.contains("renodx-dlss")
-            }).await {
-                (Some(tag), Some(url))
-            } else {
-                (Some("latest".to_string()), Some(RENODX_DLSS_URL.to_string()))
-            }
+            (Some(super::catalog::RENODX_DLSS_LATEST_TAG.to_string()), Some(RENODX_DLSS_URL.to_string()))
         }
         AddonId::DlssMipFix => {
             if let Ok((url, tag)) = resolve_github_latest_asset("bookamp/dlss-studio", |name| {
