@@ -37,13 +37,14 @@ pub const OPTISCALER_MFG_FALLBACK_URL: &str = OPTISCALER_URL;
 pub const DLSS_MIP_FIX_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-mip-fix.addon64";
 pub const DLSS_NR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-nr.addon64";
 
-pub const RENODX_REPO_URL: &str = "https://github.com/bookamp/dlss-studio";
-pub const RENODX_DLSS_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/renodx-dlss.addon64";
+pub const CDN_BASE_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev";
+pub const RENODX_REPO_URL: &str = CDN_BASE_URL;
+pub const RENODX_DLSS_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev/renodx-dlss.addon64";
 pub const RENODX_DLSS_SHA256: &str = "";
 pub const RENODX_DLSS5_URL: &str = RENODX_DLSS_URL;
 pub const RENODX_DLSS5_SHA256: &str = RENODX_DLSS_SHA256;
-pub const STREAMLINE_REPO_URL: &str = "https://github.com/bookamp/dlss-studio/releases";
-pub const NVNGX_DLSSNR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/nvngx_dlssnr.dll";
+pub const STREAMLINE_REPO_URL: &str = CDN_BASE_URL;
+pub const NVNGX_DLSSNR_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev/nvngx_dlssnr.dll";
 pub const RESHADE_SETUP_URL: &str = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe";
 pub const RESHADE_SETUP_SHA256: &str = "afe4c8f13048306307983b8b3d41d5bf00a86820440b0e57dea10950e1176445";
 
@@ -237,29 +238,39 @@ pub fn parse_streamline_asset_name(name: &str) -> Option<String> {
 }
 
 /// Resolves the latest download URL and dynamic version tag for Streamline & DLSS-NR.
-/// Queries GitHub Releases for `bookamp/dlss-studio` assets matching `streamline-*.zip`.
-/// For local development before a public release is cut, also checks `dist/` or `external_assets/`.
+/// Priority 1: Cloudflare R2 CDN index.json for verified community asset bundles.
+/// Priority 2: Local staged asset check (for local testing and packaging).
+/// Priority 3: Fallback query to GitHub Releases API.
 pub async fn resolve_latest_streamline() -> (Option<String>, Option<String>) {
-    // 1. Check GitHub API for release assets matching streamline-*.zip
+    // 1. Check Cloudflare R2 CDN index.json
+    let cdn_index_url = format!("{}/index.json", CDN_BASE_URL);
     if let Ok(client) = reqwest::Client::builder()
         .user_agent(concat!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) DLSS-Studio/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(6))
         .build()
     {
-        let url = "https://api.github.com/repos/bookamp/dlss-studio/releases";
-        if let Ok(resp) = client.get(url).send().await {
+        if let Ok(resp) = client.get(&cdn_index_url).send().await {
             if resp.status().is_success() {
-                if let Ok(releases) = resp.json::<Vec<serde_json::Value>>().await {
-                    for rel in releases {
-                        if let Some(assets) = rel.get("assets").and_then(|v| v.as_array()) {
-                            for asset in assets {
-                                let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                                if let Some(version_tag) = parse_streamline_asset_name(name) {
-                                    if let Some(dl_url) = asset.get("browser_download_url").and_then(|v| v.as_str()) {
-                                        return (Some(dl_url.to_string()), Some(version_tag));
-                                    }
-                                }
+                if let Ok(files) = resp.json::<Vec<String>>().await {
+                    let mut candidates = Vec::new();
+                    for file in files {
+                        if let Some(version_tag) = parse_streamline_asset_name(&file) {
+                            let dl_url = format!("{}/{}", CDN_BASE_URL, file);
+                            candidates.push((dl_url, version_tag));
+                        }
+                    }
+                    if !candidates.is_empty() {
+                        candidates.sort_by(|a, b| {
+                            if super::version::is_newer_version(&a.1, &b.1) {
+                                std::cmp::Ordering::Less
+                            } else if super::version::is_newer_version(&b.1, &a.1) {
+                                std::cmp::Ordering::Greater
+                            } else {
+                                a.1.cmp(&b.1)
                             }
+                        });
+                        if let Some((url, tag)) = candidates.pop() {
+                            return (Some(url), Some(tag));
                         }
                     }
                 }

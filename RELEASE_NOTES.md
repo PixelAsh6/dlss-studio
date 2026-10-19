@@ -1,31 +1,49 @@
 # DLSS 5 Studio v2.0.3 ⚡
 
-> **Sunshine / Apollo streaming session lifecycle synchronization, smooth Big Picture enter/exit transitions, refined exit dialog, and core domain modularization.**
+> **Neural Rendering deployment gating, interactive Streamline guidance with RenoDX Discord access, Cloudflare R2 add-on CDN distribution, and Skynizz v1.2.1 DLSS 5 OptiScaler integration.**
 
 ---
 
-### 🎮 Big Picture & Streaming Changes
+### 🧠 Neural Rendering & Streamline Deployment Gating
 
-- **Sunshine / Apollo Stream Lifecycle Management**:
-  - Registered DLSS Studio in `apps.json` with canonical Sunshine options (`auto-detach: false`, `wait-all: false`, `exit-timeout: 5`).
-  - Resolves an issue where exiting Big Picture left the Moonlight stream hanging on a frozen screen. Sunshine now detects process exit immediately, terminates the stream, destroys the virtual display, and returns Moonlight to the client menu.
-- **Dual-Event Streaming Process Bridge**:
-  - Spawning a secondary instance via `--big-picture` signals the running desktop window to switch to Big Picture mode and holds the stream session until exit without single-instance mutex collisions.
-  - Monitors both the stream exit event and desktop process lifecycle with zero CPU polling via Win32 `WaitForMultipleObjects`.
-- **Smooth Enter & Exit Transitions**:
-  - Added dedicated blackout transition screens (`bp_entering_title`, `bp_exiting_title` localized across all 14 supported languages) to conceal desktop window repositioning and virtual display switching.
-  - Cleaned and reset launch overlay signals on desktop return to prevent freezes.
-- **Refined Exit Confirmation Dialog**:
-  - Simplified the Big Picture exit modal to two distinct action buttons (*Exit Big Picture* / *Cancel*).
+- **Proactive Model Verification & Deployment Gating**:
+  - Enforced strict deployment gating across all routes (OptiScaler, Native ReShade, and Feeder): deployment will not proceed if the Neural Rendering runtime (`nvngx_dlssnr.dll`) is missing from `components/streamline/`.
+  - The Game Detail "Deploy" button proactively checks cache status and brings up the guidance modal directly, preventing broken in-game injections.
+- **Streamline Guidance Modal & RenoDX Discord Integration**:
+  - Interactive modal providing clear instructions on completing the Streamline setup.
+  - Direct inline link to the RenoDX Discord server to obtain the modded Neural Rendering runtime for RTX 20/30/40 cards.
+  - Added a dynamic **"Verify & Refresh"** button that validates `is_streamline_complete()` on demand and automatically dismisses the modal with a confirmation toast once the model is detected.
+  - Includes a "Manual Open Folder" button directly opening the `components/streamline/` directory in Windows Explorer.
+- **Visual Add-on Cache Status Badging**:
+  - The Add-ons page Streamline card now displays a prominent yellow `⚠ Incomplete` badge if base Streamline SDK files are cached but `nvngx_dlssnr.dll` is missing.
+- **Detached URL Launcher (Freeze Fix)**:
+  - External links now spawn in a detached background worker thread using Win32 `CREATE_NO_WINDOW (0x08000000)`, completely resolving UI freezes when users close external browser windows.
 
 ---
 
-### 🖥️ Core Desktop & Architecture Changes
+### ⚡ OptiScaler DLSS 5 v1.2.1 & Pre-SR Enhancements
 
-- **Core Domain Modularization**:
-  - Restructured monolithic core architecture into 18 dedicated submodules (`routes/`, `advisories/`, `payloads/`, `scan/`, `steamart/`, `journal/`, `addons/`, `platform/`, `vibepollo/`, `utils/`) for clean domain separation and improved maintainability.
-- **In-Process Setup Extraction**:
-  - Replaced external process invocations during setup extraction with in-process Win32 registry and process APIs for instantaneous payload unbundling.
+- **Skynizz OptiScaler DLSS 5 v1.2.1 Integration**:
+  - Upgraded built-in OptiScaler component catalog to Skynizz's v1.2.1 release featuring advanced Neural Reconstruction INI tuning, luminance stability (`CacheLowTemporal`), and x8 performance presets.
+  - Direct Feature 18 parameter forwarding and robust proxy hooking.
+- **Dynamic Add-on Version Discovery**:
+  - Eliminated hardcoded addon version tables in favor of dynamic runtime inspection and self-healing directory unwrapping.
+
+---
+
+### 🌐 Cloudflare R2 Add-on CDN Distribution
+
+- **High-Speed CDN Distribution**:
+  - Migrated add-on asset hosting to dedicated Cloudflare R2 CDN storage (`pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev`) for faster, rate-limit-free worldwide downloads.
+  - Maintained automated fallback resolvers across all component downloaders to guarantee resilient multi-source asset acquisition.
+
+---
+
+### 🛡️ Journal Parity & Vanilla Backup Continuity
+
+- **Cryptographic File Parity & Snapshot Preservation**:
+  - Preserves genuine unmodded vanilla backups through successive cross-route swaps without requiring an intermediate restore.
+  - Guaranteed clean uninstall and rollback with 100% byte-for-byte file parity, preventing mod proxies from corrupting backup directories.
 
 ---
 
@@ -40,6 +58,27 @@
 ---
 
 ### 📜 Previous Releases
+
+<details>
+<summary><b>DLSS 5 Studio v2.0.2 — Sunshine / Apollo Streaming Lifecycle & Smooth Big Picture Transitions</b></summary>
+
+- **Sunshine / Apollo Stream Lifecycle Management**:
+  - Registered DLSS Studio in `apps.json` with canonical Sunshine options (`auto-detach: false`, `wait-all: false`, `exit-timeout: 5`).
+  - Resolves an issue where exiting Big Picture left the Moonlight stream hanging on a frozen screen. Sunshine now detects process exit immediately, terminates the stream, destroys the virtual display, and returns Moonlight to the client menu.
+- **Dual-Event Streaming Process Bridge**:
+  - Spawning a secondary instance via `--big-picture` signals the running desktop window to switch to Big Picture mode and holds the stream session until exit without single-instance mutex collisions.
+  - Monitors both the stream exit event and desktop process lifecycle with zero CPU polling via Win32 `WaitForMultipleObjects`.
+- **Smooth Enter & Exit Transitions**:
+  - Added dedicated blackout transition screens (`bp_entering_title`, `bp_exiting_title` localized across all 14 supported languages) to conceal desktop window repositioning and virtual display switching.
+  - Cleaned and reset launch overlay signals on desktop return to prevent freezes.
+- **Refined Exit Confirmation Dialog**:
+  - Simplified the Big Picture exit modal to two distinct action buttons (*Exit Big Picture* / *Cancel*).
+- **Core Domain Modularization**:
+  - Restructured monolithic core architecture into 18 dedicated submodules (`routes/`, `advisories/`, `payloads/`, `scan/`, `steamart/`, `journal/`, `addons/`, `platform/`, `vibepollo/`, `utils/`) for clean domain separation and improved maintainability.
+- **In-Process Setup Extraction**:
+  - Replaced external process invocations during setup extraction with in-process Win32 registry and process APIs for instantaneous payload unbundling.
+
+</details>
 
 <details>
 <summary><b>DLSS 5 Studio v2.0.1 — Universal RTX 40 MFG Module & DirectX 11 OptiScaler D3D11on12 Interop</b></summary>
@@ -156,4 +195,3 @@
 ---
 
 **Compatibility**: Windows 10 (1903+) or Windows 11 (64-bit) • NVIDIA GeForce RTX 20/30/40/50-Series (RTX 40-Series required for 4x Multi-Frame Generation).
-

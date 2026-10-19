@@ -7,3 +7,4 @@ target/
 crates/**/target/
 *.profraw
 /external_assets/
+.wrangler/

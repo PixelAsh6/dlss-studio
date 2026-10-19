@@ -22,6 +22,27 @@ pub fn copy_to_clipboard(text: &str) {
     }
 }
 
+pub fn open_url(url: &str) {
+    if url.is_empty() {
+        return;
+    }
+    let url_owned = url.to_string();
+    std::thread::spawn(move || {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", "start", "", &url_owned])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .spawn();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("xdg-open").arg(&url_owned).spawn();
+        }
+    });
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum AppStatus {
     Ready,

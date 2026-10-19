@@ -34,11 +34,12 @@ fn test_addon_urls_and_hashes_structure() {
     assert!(OPTISCALER_URL.starts_with("https://github.com/Skynizz/optiscaler-dlss5"));
     assert_eq!(OPTISCALER_SHA256.len(), 64);
 
-    assert_eq!(RENODX_REPO_URL, "https://github.com/bookamp/dlss-studio");
-    assert_eq!(RENODX_DLSS_URL, "https://github.com/bookamp/dlss-studio/releases/latest/download/renodx-dlss.addon64");
+    assert_eq!(CDN_BASE_URL, "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev");
+    assert_eq!(RENODX_REPO_URL, CDN_BASE_URL);
+    assert_eq!(RENODX_DLSS_URL, "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev/renodx-dlss.addon64");
     assert_eq!(RENODX_DLSS_SHA256, "");
 
-    assert_eq!(STREAMLINE_REPO_URL, "https://github.com/bookamp/dlss-studio/releases");
+    assert_eq!(STREAMLINE_REPO_URL, CDN_BASE_URL);
     let streamline_meta = AddonId::Streamline.metadata();
     assert_eq!(streamline_meta.url, STREAMLINE_REPO_URL);
 }
@@ -116,3 +117,14 @@ fn test_is_newer_version_compound_streamline() {
     assert!(is_newer_version("2.14.1 (DLSS-NR 310.9.16.0)", "2.15.0 (DLSS-NR 310.9.16.0)"));
     assert!(!is_newer_version("2.15.0 (DLSS-NR 310.9.16.0)", "2.14.1 (DLSS-NR 310.9.16.0)"));
 }
+
+#[tokio::test]
+async fn test_resolve_latest_streamline_cdn() {
+    let (url_opt, tag_opt) = resolve_latest_streamline().await;
+    // Live Cloudflare CDN has index.json containing streamline-2.14.1-dlssnr-310.9.16.0.zip
+    if let (Some(url), Some(tag)) = (url_opt, tag_opt) {
+        assert!(url.starts_with(CDN_BASE_URL) || url.contains("streamline"));
+        assert!(tag.contains("2.14.1"));
+    }
+}
+
