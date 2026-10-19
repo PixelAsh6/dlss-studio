@@ -218,27 +218,7 @@ pub fn is_feeder_cached() -> bool {
 
 /// Checks whether the RenoDX Native DLSS 5 engine is cached on disk
 pub fn is_renodx_engine_cached() -> bool {
-    let mut roots = vec![get_components_root()];
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            roots.push(parent.join("components"));
-            if parent.join("renodx-dlss5.addon64").is_file()
-                || parent.join("renodx-dlss.addon64").is_file()
-            {
-                return true;
-            }
-        }
-    }
-    for root in roots {
-        if root.join("renodx-dlss5").join("renodx-dlss5.addon64").is_file()
-            || root.join("renodx-dlss5.addon64").is_file()
-            || root.join("renodx-dlss").join("renodx-dlss.addon64").is_file()
-            || root.join("renodx-dlss.addon64").is_file()
-        {
-            return true;
-        }
-    }
-    false
+    crate::core::payloads::discovery::find_renodx_payload().is_some()
 }
 
 /// Checks whether the D3D12 Mip Fix companion is cached on disk

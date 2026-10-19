@@ -128,3 +128,11 @@ async fn test_resolve_latest_streamline_cdn() {
     }
 }
 
+#[test]
+fn test_is_newer_version_renodx() {
+    use dlss_studio::core::addons::version::is_newer_version;
+    assert!(is_newer_version("v0.2026.0827.2036", "v0.2026.1016.1704"));
+    assert!(!is_newer_version("v0.2026.1016.1704", "v0.2026.0827.2036"));
+    assert!(!is_newer_version("v0.2026.1016.1704", "v0.2026.1016.1704"));
+}
+

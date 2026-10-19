@@ -310,12 +310,12 @@ where
 
     match id {
         AddonId::RenoDxDlss5 => {
-            if !force && is_renodx_engine_cached() {
+            let renodx_dir = comp_root.join("renodx-dlss");
+            let target_dest = renodx_dir.join("renodx-dlss.addon64");
+            if !force && target_dest.is_file() {
                 return Ok(());
             }
-            let renodx_dir = comp_root.join("renodx-dlss");
             let _ = fs::create_dir_all(&renodx_dir);
-            let target_dest = renodx_dir.join("renodx-dlss.addon64");
 
             // Check local build / repository candidate files first before downloading
             let mut local_candidates = vec![

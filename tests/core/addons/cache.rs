@@ -217,3 +217,31 @@ fn test_streamline_cache_validation_and_dynamic_manifest_resolution() {
     let _ = fs::remove_dir_all(&sl_dir);
 }
 
+#[test]
+fn test_renodx_priority_resolution_and_fallback() {
+    let _lock = STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let root = get_components_root();
+    let modern_dir = root.join("renodx-dlss");
+    let legacy_dir = root.join("renodx-dlss5");
+    let _ = fs::create_dir_all(&modern_dir);
+    let _ = fs::create_dir_all(&legacy_dir);
+
+    let modern_file = modern_dir.join("renodx-dlss.addon64");
+    let legacy_file = legacy_dir.join("renodx-dlss5.addon64");
+
+    // Case 1: Both present -> Priority 1 (modern) wins
+    let _ = fs::write(&modern_file, b"MODERN_RENODX_DLSS");
+    let _ = fs::write(&legacy_file, b"LEGACY_RENODX_DLSS5");
+    let resolved = dlss_studio::core::payloads::discovery::find_renodx_payload();
+    assert_eq!(resolved, Some(modern_file.clone()), "Priority 1 modern renodx-dlss.addon64 must win when both exist");
+
+    // Case 2: Modern removed -> Priority 2 (legacy fallback) wins
+    let _ = fs::remove_file(&modern_file);
+    let resolved_fallback = dlss_studio::core::payloads::discovery::find_renodx_payload();
+    assert_eq!(resolved_fallback, Some(legacy_file.clone()), "Priority 2 legacy renodx-dlss5.addon64 must be used when modern is absent");
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&modern_dir);
+    let _ = fs::remove_dir_all(&legacy_dir);
+}
+

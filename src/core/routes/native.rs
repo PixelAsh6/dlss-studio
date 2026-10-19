@@ -95,22 +95,22 @@ pub fn deploy_native_dlss5_with_bundle(opts: &DeployOptions, payloads: &PayloadB
     if renodx_active {
         if let Some(renodx_src) = &payloads.renodx_dlss5_addon {
             if renodx_src.is_file() {
-                let file_name = renodx_src.file_name().and_then(|n| n.to_str()).unwrap_or("dlss-nr.addon64");
+                let file_name = renodx_src.file_name().and_then(|n| n.to_str()).unwrap_or("renodx-dlss.addon64");
                 let dest = mod_root.join(file_name);
                 track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, renodx_src, &dest, "addon", &mut log)
                     .map_err(|e| format!("Failed to copy {}: {}", file_name, e))?;
-                let stem = renodx_src.file_stem().and_then(|s| s.to_str()).unwrap_or("dlss-nr").to_string();
+                let stem = renodx_src.file_stem().and_then(|s| s.to_str()).unwrap_or("renodx-dlss").to_string();
                 deployed_addon_stems.push(stem.clone());
                 log.push(format!("[ADDON] {} deployed (DLSS 5 Neural Rendering Engine)", file_name));
 
-                // Clean up any conflicting other neural rendering addons so only one is active
-                let conflicting = ["dlss-nr.addon64", "renodx-dlss.addon64", "renodx-dlss5.addon64"];
-                for c in &conflicting {
-                    if *c != file_name {
-                        let stale = mod_root.join(c);
-                        if stale.is_file() {
-                            let _ = fs::remove_file(&stale);
-                            log.push(format!("[CLEAN] Removed conflicting add-on {}", c));
+                // If upgrading or deploying, clean conflicting older/alternate add-ons if present in game dir
+                let stale_candidates = ["dlss-nr.addon64", "renodx-dlss5.addon64", "renodx-dlss.addon64"];
+                for stale in &stale_candidates {
+                    if *stale != file_name {
+                        let stale_path = mod_root.join(stale);
+                        if stale_path.is_file() {
+                            let _ = fs::remove_file(&stale_path);
+                            log.push(format!("[CLEAN] Removed conflicting add-on {}", stale));
                         }
                     }
                 }
