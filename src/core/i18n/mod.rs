@@ -240,3 +240,82 @@ pub fn translate_advisory_recommendation(lang: &str, rec: &str) -> String {
         rec.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_streamline_and_config_keys_across_all_supported_languages() {
+        let test_keys = [
+            "addon_incomplete_badge",
+            "modal_streamline_title",
+            "modal_streamline_subtitle",
+            "modal_streamline_auto_title",
+            "modal_streamline_auto_desc",
+            "modal_streamline_btn_download",
+            "modal_streamline_downloading",
+            "modal_streamline_manual_title",
+            "modal_streamline_manual_desc",
+            "modal_streamline_discord_link_text",
+            "modal_streamline_nr_badge",
+            "modal_streamline_required_files",
+            "modal_streamline_target_folder",
+            "modal_streamline_btn_open_folder",
+            "modal_streamline_btn_copy_path",
+            "modal_streamline_btn_verify",
+            "modal_streamline_btn_dismiss",
+            "modal_streamline_verified_success",
+            "modal_streamline_not_detected",
+            "btn_setup_streamline",
+            "btn_streamline_setup_guide",
+            "toast_streamline_copied",
+            "modal_streamline_file_interposer",
+            "modal_streamline_file_common",
+            "modal_streamline_file_dlss",
+            "modal_streamline_file_dlssg",
+            "log_write_configured",
+        ];
+
+        for lang in SUPPORTED_LANGS {
+            for key in test_keys {
+                let val = match lang.code {
+                    "en" => langs::en::lookup(key),
+                    "de" => langs::de::lookup(key),
+                    "es" => langs::es::lookup(key),
+                    "fr" => langs::fr::lookup(key),
+                    "it" => langs::it::lookup(key),
+                    "pt" => langs::pt::lookup(key),
+                    "ru" => langs::ru::lookup(key),
+                    "zh" => langs::zh::lookup(key),
+                    "ja" => langs::ja::lookup(key),
+                    "ko" => langs::ko::lookup(key),
+                    "pl" => langs::pl::lookup(key),
+                    "tr" => langs::tr::lookup(key),
+                    "ar" => langs::ar::lookup(key),
+                    "hi" => langs::hi::lookup(key),
+                    other => panic!("Unsupported language in SUPPORTED_LANGS: {}", other),
+                };
+
+                assert!(
+                    val.is_some(),
+                    "Missing translation for key '{}' in language '{}'",
+                    key,
+                    lang.code
+                );
+                assert!(
+                    !val.unwrap().is_empty(),
+                    "Empty translation for key '{}' in language '{}'",
+                    key,
+                    lang.code
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_format_log_entry_for_log_write_configured() {
+        let formatted = format_log_entry("en", "@{log_write_configured|test.ini}");
+        assert_eq!(formatted, "Configured settings file: test.ini");
+    }
+}

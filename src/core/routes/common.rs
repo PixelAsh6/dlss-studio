@@ -520,6 +520,6 @@ pub fn track_and_write(
 
     fs::write(dest, content)?;
     crate::core::logger::info("deploy", &format!("Wrote configuration file: {}", dest.display()));
-    log.push(format!("@{{log_config_written|{}}}", rel));
+    log.push(format!("@{{log_write_configured|{}}}", rel));
     Ok(())
 }

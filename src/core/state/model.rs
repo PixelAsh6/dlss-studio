@@ -115,7 +115,7 @@ pub struct AppState {
     pub auto_scan_drives: bool,
     #[serde(default = "default_true", rename = "rustTheme")]
     pub rust_theme: bool,
-    #[serde(default = "default_run_in_background", rename = "runInBackground")]
+    #[serde(default = "default_run_in_background", rename = "runInBackground", alias = "run_in_background")]
     pub run_in_background: bool,
     #[serde(default, rename = "cachedGames")]
     pub cached_games: Vec<crate::core::scan::GameEntry>,
@@ -205,5 +205,21 @@ impl AppState {
 
     pub fn unhide_all(&mut self) {
         self.hidden.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_appstate_deserializes_run_in_background_from_camel_and_snake_case() {
+        let json_snake = r#"{"run_in_background": false}"#;
+        let state_snake: AppState = serde_json::from_str(json_snake).unwrap();
+        assert!(!state_snake.run_in_background, "snake_case run_in_background: false must be deserialized as false");
+
+        let json_camel = r#"{"runInBackground": false}"#;
+        let state_camel: AppState = serde_json::from_str(json_camel).unwrap();
+        assert!(!state_camel.run_in_background, "camelCase runInBackground: false must be deserialized as false");
     }
 }

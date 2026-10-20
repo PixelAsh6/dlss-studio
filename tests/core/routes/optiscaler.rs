@@ -85,6 +85,7 @@ fn create_mock_payload_bundle(temp: &Path) -> PayloadBundle {
     fs::create_dir_all(&streamline_dir).unwrap();
     fs::write(streamline_dir.join("sl.interposer.dll"), b"MOCK_SL_INTERPOSER").unwrap();
     fs::write(streamline_dir.join("sl.common.dll"), b"MOCK_SL_COMMON").unwrap();
+    fs::write(streamline_dir.join("sl.dlss.dll"), b"MOCK_SL_DLSS").unwrap();
     fs::write(streamline_dir.join("sl.dlss_g.dll"), b"MOCK_SL_DLSSG").unwrap();
     fs::write(streamline_dir.join("sl.reflex.dll"), b"MOCK_SL_REFLEX").unwrap();
     fs::write(streamline_dir.join("sl.pcl.dll"), b"MOCK_SL_PCL").unwrap();
@@ -725,6 +726,9 @@ fn test_optiscaler_route_without_mfg() {
     assert!(!game_dir.join("version.dll").exists(), "version.dll must not be deployed when mfg_unlock is false");
     let ini_content = fs::read_to_string(game_dir.join("OptiScaler.ini")).unwrap();
     assert_eq!(get_ini(&ini_content, "FrameGen", "External"), Some("false".to_string()));
+    assert!(game_dir.join("OptiScaler").join("streamline").join("sl.pcl.dll").exists(), "Streamline stack must be deployed even when mfg_unlock is false");
+    assert!(game_dir.join("OptiScaler").join("streamline").join("sl.dlss.dll").exists(), "sl.dlss.dll must be deployed to OptiScaler/streamline");
+    assert!(game_dir.join("OptiScaler").join("streamline").join("sl.dlss_g.dll").exists(), "sl.dlss_g.dll must be deployed to OptiScaler/streamline");
 }
 
 #[test]
@@ -980,8 +984,8 @@ fn test_streamline_control_resonant_v2_12_preserves_native_streamline_files() {
 }
 
 #[test]
-fn test_optiscaler_strictly_never_deploys_sl_pcl_dll() {
-    let temp = TempDir::new("opti_no_sl_pcl");
+fn test_optiscaler_always_deploys_streamline_stack_to_optiscaler_streamline() {
+    let temp = TempDir::new("opti_sl_pcl");
     let game_dir = temp.join("TestGame");
     let bin_dir = game_dir.clone();
     fs::create_dir_all(&bin_dir).unwrap();
@@ -993,7 +997,6 @@ fn test_optiscaler_strictly_never_deploys_sl_pcl_dll() {
     fs::write(bin_dir.join("sl.pcl.dll"), b"VANILLA_PCL_DLL").unwrap();
 
     let payloads = create_mock_payload_bundle(&temp.join("payloads"));
-    // Ensure mock streamline has sl.pcl.dll in payloads
     fs::write(payloads.streamline_dir.as_ref().unwrap().join("sl.pcl.dll"), b"MOCK_PCL_IN_PAYLOADS").unwrap();
 
     let opts = DeployOptions {
@@ -1012,9 +1015,24 @@ fn test_optiscaler_strictly_never_deploys_sl_pcl_dll() {
     let res = deploy_optiscaler_with_bundle(&opts, &payloads).expect("deploy must succeed");
     assert!(res.success);
 
-    // CRITICAL: pre-existing game sl.pcl.dll must be preserved, and sl.pcl.dll must NEVER be deployed to OptiScaler/streamline
+    // CRITICAL: pre-existing game sl.pcl.dll in game root must be preserved byte-for-byte!
     assert_eq!(fs::read(bin_dir.join("sl.pcl.dll")).unwrap(), b"VANILLA_PCL_DLL", "Pre-existing game sl.pcl.dll must be preserved!");
-    assert!(!bin_dir.join("OptiScaler").join("streamline").join("sl.pcl.dll").exists(), "sl.pcl.dll must NOT be deployed to OptiScaler/streamline");
+
+    // OptiScaler/streamline must receive the complete Streamline stack
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.pcl.dll").exists(), "sl.pcl.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.dlss.dll").exists(), "sl.dlss.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.dlss_g.dll").exists(), "sl.dlss_g.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.common.dll").exists(), "sl.common.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.interposer.dll").exists(), "sl.interposer.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("sl.reflex.dll").exists(), "sl.reflex.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("OptiScaler").join("streamline").join("nvngx_dlssg.dll").exists(), "nvngx_dlssg.dll must be deployed to OptiScaler/streamline");
+    assert!(bin_dir.join("nvngx_dlssg.dll").exists(), "nvngx_dlssg.dll must be deployed to mod root");
+
+    // Clean and restore
+    let restored = dlss_studio::core::journal::restore_game(&game_dir).expect("restore must succeed");
+    assert!(restored);
+    assert_eq!(fs::read(bin_dir.join("sl.pcl.dll")).unwrap(), b"VANILLA_PCL_DLL", "Pre-existing game sl.pcl.dll must be preserved after restore!");
+    assert!(!bin_dir.join("OptiScaler").exists(), "OptiScaler directory must be wiped on restore");
 }
 
 
