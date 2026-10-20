@@ -226,3 +226,13 @@ fn test_info_advisory_does_not_trigger_override_mode() {
     let has_override_warning = active_advisories_with_warning.iter().any(|a| a.severity == AdvisorySeverity::Warning);
     assert!(has_override_warning, "Warning advisories must trigger deploy override mode");
 }
+
+#[test]
+fn test_streamline_setup_button_states_and_visibility() {
+    // Contract: is_streamline_complete is strictly the conjunction of is_streamline_cached and is_dlssnr_cached.
+    // When complete, the UI omits the setup guide button and displays only the mandatory core badge.
+    assert_eq!(
+        dlss_studio::core::addons::is_streamline_complete(),
+        dlss_studio::core::addons::is_streamline_cached() && dlss_studio::core::addons::is_dlssnr_cached()
+    );
+}

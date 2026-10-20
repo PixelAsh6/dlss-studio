@@ -75,7 +75,18 @@ pub fn load_state() -> AppState {
         return default_st;
     }
     if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(mut state) = serde_json::from_str::<AppState>(&content) {
+        let parse_res = serde_json::from_str::<AppState>(&content).or_else(|_| {
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(obj) = val.as_object_mut() {
+                    obj.remove("run_in_background");
+                }
+                serde_json::from_value::<AppState>(val).map_err(|e| e.to_string())
+            } else {
+                Err("failed to parse json".to_string())
+            }
+        });
+
+        if let Ok(mut state) = parse_res {
             let current_version = CURRENT_APP_VERSION;
             let old_version = state.version.clone();
             let needs_migration = old_version.as_deref() != Some(current_version);
@@ -186,3 +197,4 @@ pub fn sync_overlay_preferences(state: &AppState) {
     });
     let _ = fs::write(&pref_file, payload.to_string());
 }
+

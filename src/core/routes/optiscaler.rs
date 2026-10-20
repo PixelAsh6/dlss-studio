@@ -313,14 +313,18 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
                 }
             }
         }
-    } else if opts.mfg_unlock {
+    } else {
+        // Non-streamline game: Always deploy verified Streamline 2.14.1 stack into OptiScaler/streamline
+        // so OptiScaler's upscaler, Reflex, and in-game Frame Generation features have all required plugins.
         if let Some(streamline_src) = &payloads.streamline_dir {
             if streamline_src.is_dir() {
                 let sl_files = [
                     "sl.interposer.dll",
                     "sl.common.dll",
+                    "sl.dlss.dll",
                     "sl.dlss_g.dll",
                     "sl.reflex.dll",
+                    "sl.pcl.dll",
                     "nvngx_dlssg.dll",
                 ];
                 let opti_sl_dir = mod_root.join("OptiScaler").join("streamline");
@@ -338,7 +342,7 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
                     track_and_copy(&mut manifest, &opts.game_dir, &backup_dir, &dlssg_src, &dest_file, "streamline", &mut log)
                         .map_err(|e| format!("Failed to deploy nvngx_dlssg.dll to mod root: {}", e))?;
                 }
-                log.push("[STREAMLINE] Deployed verified Streamline 2.14.1 stack into OptiScaler/streamline for DLSS-G FrameGen".to_string());
+                log.push("[STREAMLINE] Deployed verified Streamline 2.14.1 stack into OptiScaler/streamline".to_string());
             }
         }
     }

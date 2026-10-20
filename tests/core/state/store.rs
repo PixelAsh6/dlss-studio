@@ -187,3 +187,19 @@ fn test_load_state_skips_migration_when_current_version() {
     assert_eq!(loaded.version.as_deref(), Some(CURRENT_APP_VERSION));
 }
 
+#[test]
+fn test_load_state_handles_duplicate_alias_keys_and_respects_false() {
+    let _state_lock = dlss_studio::core::state::STATE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let path = dlss_studio::core::state::get_state_path();
+    let json_with_both = r#"{
+  "version": "2.0.3",
+  "folders": [],
+  "runInBackground": false,
+  "run_in_background": false
+}"#;
+    std::fs::write(&path, json_with_both).expect("write mock json must succeed");
+
+    let loaded = load_state();
+    assert!(!loaded.run_in_background, "load_state must survive duplicate alias keys and preserve false");
+}
+

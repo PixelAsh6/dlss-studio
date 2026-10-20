@@ -2785,6 +2785,15 @@ pub fn App() -> Element {
                                                     },
                                                     "Update to {latest_tag}"
                                                 }
+                                                button {
+                                                    class: "ghost sm",
+                                                    style: "font-size:0.75rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);",
+                                                    title: crate::core::i18n::t(&current_lang.read(), "btn_streamline_setup_guide"),
+                                                    onclick: move |_| {
+                                                        show_streamline_guidance_modal.set(true);
+                                                    },
+                                                    "📁 {crate::core::i18n::t(&current_lang.read(), \"btn_streamline_setup_guide\")}"
+                                                }
                                             } else if is_cached {
                                                 if crate::core::addons::is_dlssnr_cached() {
                                                     span { class: "tag accent", style: "font-weight:600; font-size:0.75rem; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px;",
@@ -2795,15 +2804,15 @@ pub fn App() -> Element {
                                                         title: "nvngx_dlssnr.dll is missing",
                                                         "\u{26A0} {crate::core::i18n::t(&current_lang.read(), \"addon_incomplete_badge\")}"
                                                     }
-                                                }
-                                                button {
-                                                    class: "ghost sm",
-                                                    style: "font-size:0.75rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);",
-                                                    title: "View Streamline installation guidance and folder path",
-                                                    onclick: move |_| {
-                                                        show_streamline_guidance_modal.set(true);
-                                                    },
-                                                    "📁 {crate::core::i18n::t(&current_lang.read(), \"btn_streamline_setup_guide\")}"
+                                                    button {
+                                                        class: "ghost sm",
+                                                        style: "font-size:0.75rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);",
+                                                        title: crate::core::i18n::t(&current_lang.read(), "btn_streamline_setup_guide"),
+                                                        onclick: move |_| {
+                                                            show_streamline_guidance_modal.set(true);
+                                                        },
+                                                        "📁 {crate::core::i18n::t(&current_lang.read(), \"btn_streamline_setup_guide\")}"
+                                                    }
                                                 }
                                             } else {
                                                 button {
@@ -5138,10 +5147,10 @@ pub fn App() -> Element {
                                     "."
                                 }
                                 ul { style: "margin:0 0 12px 18px; padding:0; font-size:0.82rem; font-family:monospace; color:var(--text-bright); line-height:1.6;",
-                                    li { "sl.interposer.dll (Required Streamline interposer)" }
-                                    li { "sl.common.dll (Common Streamline runtime)" }
-                                    li { "sl.dlss.dll (DLSS Super Resolution dispatch)" }
-                                    li { "sl.dlss_g.dll (DLSS Frame Generation dispatch)" }
+                                    li { "sl.interposer.dll ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_file_interposer\")})" }
+                                    li { "sl.common.dll ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_file_common\")})" }
+                                    li { "sl.dlss.dll ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_file_dlss\")})" }
+                                    li { "sl.dlss_g.dll ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_file_dlssg\")})" }
                                     li {
                                         b { "nvngx_dlssnr.dll" }
                                         span { style: "color:var(--accent); font-weight:600;", " ({crate::core::i18n::t(&current_lang.read(), \"modal_streamline_nr_badge\")})" }
@@ -5158,7 +5167,7 @@ pub fn App() -> Element {
                                         }
                                         button {
                                             class: "ghost sm",
-                                            title: "Copy folder path",
+                                            title: crate::core::i18n::t(&current_lang.read(), "modal_streamline_btn_copy_path"),
                                             onclick: move |_| {
                                                 copy_to_clipboard(&comp_dir_for_copy);
                                                 copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "toast_streamline_copied").to_string());
@@ -5169,7 +5178,7 @@ pub fn App() -> Element {
                                         }
                                         button {
                                             class: "ghost sm",
-                                            title: "Open in Windows Explorer",
+                                            title: crate::core::i18n::t(&current_lang.read(), "modal_streamline_btn_open_folder"),
                                             onclick: move |_| {
                                                 let _ = std::fs::create_dir_all(&comp_dir_for_open);
                                                 let _ = std::process::Command::new("explorer").arg(&comp_dir_for_open).spawn();

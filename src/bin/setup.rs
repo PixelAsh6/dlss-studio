@@ -1617,20 +1617,35 @@ fn set_windows_startup_registry(installed_exe: &Path, enable: bool) {
     }
 }
 
-/// Persists background preference directly to library.json without launching child processes
-fn set_background_preference(storage_dest: &Path, run_in_background: bool) {
-    let update_state = |state_path: &Path| {
-        let mut data: serde_json::Value = if let Ok(c) = std::fs::read_to_string(state_path) {
-            serde_json::from_str(&c).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        if let Some(obj) = data.as_object_mut() {
-            obj.insert("run_in_background".to_string(), serde_json::Value::Bool(run_in_background));
-        }
-        let _ = std::fs::write(state_path, serde_json::to_string_pretty(&data).unwrap_or_default());
+/// Persists user preferences (background execution and language) into library.json
+/// using the typed AppState schema. This guarantees field ordering is preserved without
+/// alphabetizing or rearranging the file, and strictly avoids duplicate alias collisions.
+fn update_installation_library_preferences(storage_dest: &Path, run_in_background: bool, lang_code: &str) {
+    let state_path = storage_dest.join("library.json");
+    if let Some(parent) = state_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut state = if let Ok(content) = std::fs::read_to_string(&state_path) {
+        serde_json::from_str::<dlss_studio::core::state::model::AppState>(&content).or_else(|_| {
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(obj) = val.as_object_mut() {
+                    obj.remove("run_in_background");
+                }
+                serde_json::from_value::<dlss_studio::core::state::model::AppState>(val)
+            } else {
+                Err(serde::de::Error::custom("failed to parse JSON"))
+            }
+        }).unwrap_or_default()
+    } else {
+        dlss_studio::core::state::model::AppState::default()
     };
-    update_state(&storage_dest.join("library.json"));
+
+    state.run_in_background = run_in_background;
+    state.lang = lang_code.to_string();
+
+    if let Ok(json) = serde_json::to_string_pretty(&state) {
+        let _ = std::fs::write(&state_path, json);
+    }
 }
 
 /// Executes the pure native installation
@@ -1700,21 +1715,6 @@ fn run_installation_pipeline(
         serde_json::to_string_pretty(&storage_cfg).unwrap_or_default(),
     );
 
-    // Persist selected language into library.json so DLSS Studio immediately launches in this language
-    let lang_code = selected_lang.clone();
-    let update_library_lang = |lib_path: &Path| {
-        let mut data: serde_json::Value = if let Ok(c) = std::fs::read_to_string(lib_path) {
-            serde_json::from_str(&c).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        if let Some(obj) = data.as_object_mut() {
-            obj.insert("lang".to_string(), serde_json::Value::String(lang_code.clone()));
-        }
-        let _ = std::fs::write(lib_path, serde_json::to_string_pretty(&data).unwrap_or_default());
-    };
-    update_library_lang(&storage_dest.join("library.json"));
-
     // Copy setup.exe as uninstall.exe in target folder (prevent copying onto itself)
     if let Ok(curr) = std::env::current_exe() {
         let uninst_dest = dest.join("uninstall.exe");
@@ -1751,7 +1751,7 @@ fn run_installation_pipeline(
 
     // Apply startup & background preferences natively (zero child subprocess overhead)
     set_windows_startup_registry(&installed_exe, startup);
-    set_background_preference(&storage_dest, background);
+    update_installation_library_preferences(&storage_dest, background, &selected_lang);
 
     Ok(())
 }
