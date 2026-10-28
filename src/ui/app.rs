@@ -262,6 +262,7 @@ pub fn App() -> Element {
         device_id: 0x2684,
         dedicated_video_memory: 24 * 1024 * 1024 * 1024,
         is_rtx_40: true,
+        family: "ada".to_string(),
     }]);
     let mut games = use_signal(move || init_cached_games);
     let recents = use_signal(move || init_recents);
@@ -422,6 +423,9 @@ pub fn App() -> Element {
     let mut opti_passes = use_signal(|| 3u32);
     let init_mfg = std::env::var("DLSS_TEST_MFG").is_ok();
     let mut mfg_choice = use_signal(move || init_mfg);
+    let mut sm86_choice = use_signal(|| false);
+    let mut sm86_multiplier = use_signal(|| 4u32);
+    let mut sm86_issues = use_signal(|| Vec::<crate::core::sm86::Sm86Issue>::new());
     let mut mfg_multiplier = use_signal(|| 4u32);
     let mut nr_style_choice = use_signal(|| true);
     let mut nr_style_preset = use_signal(|| 0usize);
@@ -480,7 +484,6 @@ pub fn App() -> Element {
     let mut sm86_cached = use_signal(|| Option::<String>::None);
     let mut sm86_status = use_signal(|| Option::<String>::None);
     let mut sm86_busy = use_signal(|| false);
-    let mut sm86_installed = use_signal(|| std::collections::HashMap::<String, Option<String>>::new());
     let mut sm86_refresh = use_signal(|| 0usize);
 
     use_effect(move || {
@@ -536,8 +539,6 @@ pub fn App() -> Element {
         }
         spawn(async move {
             sm86_cached.set(crate::core::sm86::cached_version());
-            let list = games.read().clone();
-            sm86_installed.set(crate::core::sm86::scan_installed(&list).into_iter().collect());
         });
     });
     let mut dlg_path = use_signal(String::new);
@@ -682,6 +683,7 @@ pub fn App() -> Element {
         device_id: 0x2684,
         dedicated_video_memory: 24 * 1024 * 1024 * 1024,
         is_rtx_40: true,
+        family: "ada".to_string(),
     });
 
     let selected_game = sheet_game_idx.read().and_then(|idx| games.read().get(idx).cloned());
@@ -705,6 +707,9 @@ pub fn App() -> Element {
                             let mult = if g.mfg_multiplier > 0 { g.mfg_multiplier } else { 4 };
                             mfg_multiplier.set(mult);
                             mfg_choice.set(g.mfg_unlock_installed);
+                            sm86_choice.set(crate::core::sm86::installed_version(&g).is_some());
+                            sm86_multiplier.set(crate::core::sm86::installed_multiplier(&crate::core::sm86::deploy_dir(&g)).unwrap_or(4));
+                            sm86_issues.set(crate::core::sm86::runtime_issues(&crate::core::sm86::deploy_dir(&g), 5));
                             nr_style_preset.set(g.nr_style);
                             nr_style_choice.set(g.nr_style_enabled);
 
@@ -730,6 +735,9 @@ pub fn App() -> Element {
                             route_choice.set(rec.as_str().to_string());
                             mfg_choice.set(false);
                             mfg_multiplier.set(4);
+                            sm86_choice.set(false);
+                            sm86_multiplier.set(4);
+                            sm86_issues.set(Vec::<crate::core::sm86::Sm86Issue>::new());
                             opti_pre_sr.set(true);
                             opti_passes.set(1);
                             nr_style_preset.set(0);
@@ -3527,12 +3535,8 @@ pub fn App() -> Element {
                                 b { "{primary_gpu.dedicated_video_memory / 1024 / 1024} MB" }
                             }
                             div { style: "display:flex; justify-content:space-between; align-items:center; padding:12px 0;",
-                                span { "{crate::core::i18n::t(&current_lang.read(), \"diag_ada_arch\")}" }
-                                if primary_gpu.is_rtx_40 {
-                                    span { style: "color:var(--accent);font-weight:700;", "{crate::core::i18n::t(&current_lang.read(), \"diag_ada_supported\")}" }
-                                } else {
-                                    span { "{crate::core::i18n::t(&current_lang.read(), \"diag_ada_standard\")}" }
-                                }
+                                span { "{crate::core::i18n::t(&current_lang.read(), \"diag_gpu_arch\")}" }
+                                b { "{crate::core::gpu::family_display(&primary_gpu.family)}" }
                             }
 
                             // ---------------- SM86 FRAME GENERATION ----------------
@@ -3645,7 +3649,7 @@ pub fn App() -> Element {
                                             for g in &sm86_games {
                                                 {
                                                     let norm = crate::core::state::paths::normalize_game_path(&g.dir);
-                                                    let installed = sm86_installed.read().get(&norm).cloned().flatten();
+                                                    let installed = crate::core::sm86::installed_version(&g);
                                                     let is_update = installed.clone().map(|c| {
                                                         sm86_upstream.read().clone().map(|u| crate::core::addons::is_newer_version(&c, &u)).unwrap_or(false)
                                                     }).unwrap_or(false);
@@ -3679,7 +3683,7 @@ pub fn App() -> Element {
                                                                             sm86_busy.set(true);
                                                                             sm86_status.set(None);
                                                                             let mut log = Vec::new();
-                                                                            match crate::core::sm86::install(&game, &mut log) {
+                                                                            match crate::core::sm86::install(&game, 4, &mut log) {
                                                                                 Ok(()) => sm86_status.set(None),
                                                                                 Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
                                                                             }
@@ -3706,7 +3710,7 @@ pub fn App() -> Element {
                                                                                 sm86_busy.set(true);
                                                                                 sm86_status.set(None);
                                                                                 let mut log = Vec::new();
-                                                                                match crate::core::sm86::remove(&game, &mut log) {
+                                                                                match crate::core::sm86::uninstall(&game, &mut log) {
                                                                                     Ok(_) => sm86_status.set(None),
                                                                                     Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
                                                                                 }
@@ -3845,7 +3849,8 @@ pub fn App() -> Element {
                         );
                         let has_override = active_advisories.iter().any(|a| a.severity == crate::core::advisories::AdvisorySeverity::Warning);
 
-                        let show_mfg = true;
+                        let show_sm86 = primary_gpu.family == "ampere" || primary_gpu.family == "turing";
+                        let show_mfg = !show_sm86;
                         let show_pre_sr = effective_backend == "optiscaler";
                         let show_nr_style = effective_backend == "reshade" || (effective_backend == "optiscaler" && *opti_pre_sr.read());
                         let feeder_label = if is_dx11 {
@@ -4365,7 +4370,46 @@ pub fn App() -> Element {
                                             }
                                         }
 
-                                        // Detected Graphics Modules (Collapsible)
+                                                                                if show_sm86 {
+                                            div { class: if *sm86_choice.read() { "sheet-feature-card on" } else { "sheet-feature-card" },
+                                                input { type: "checkbox", id: "chkSm86", checked: *sm86_choice.read(), onchange: move |e| sm86_choice.set(e.checked()) }
+                                                div { class: "body",
+                                                    div { class: "t",
+                                                        label { r#for: "chkSm86", class: "t-left", style: "cursor: pointer;",
+                                                            span { "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_title\")}" }
+                                                        }
+                                                        div { class: "passes-ctrl",
+                                                            span { "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_multiplier\")}" }
+                                                            select { class: "passes-select", value: "{sm86_multiplier}", disabled: !*sm86_choice.read(), onchange: move |e| sm86_multiplier.set(e.value().parse::<u32>().unwrap_or(4)),
+                                                                option { value: "2", "2x" }
+                                                                option { value: "3", "3x" }
+                                                                option { value: "4", "4x" }
+                                                                option { value: "5", "5x" }
+                                                                option { value: "6", "6x" }
+                                                            }
+                                                        }
+                                                    }
+                                                    div { class: "d", "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_desc\")}" }
+                                                    div { style: "margin-top:8px;",
+                                                        span { class: "dim", style: "font-size:0.8em;", "{crate::core::i18n::t(&current_lang.read(), \"sm86_issues_title\")}" }
+                                                        if sm86_issues.read().is_empty() {
+                                                            div { class: "dim", style: "font-size:0.75em;", "{crate::core::i18n::t(&current_lang.read(), \"sm86_no_issues\")}" }
+                                                        } else {
+                                                            for issue in sm86_issues.read().iter() {
+                                                                div { style: "font-size:0.75em; padding:2px 0;",
+                                                                    div { "{issue.raw}" }
+                                                                    if !issue.hint_key.is_empty() {
+                                                                        div { class: "dim", "{crate::core::i18n::t(&current_lang.read(), issue.hint_key)}" }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+// Detected Graphics Modules (Collapsible)
                                         {
                                             if !target_game.files.is_empty() {
                                                 let is_exp = *modules_expanded.read();
@@ -4473,6 +4517,8 @@ pub fn App() -> Element {
                                                             let opti_passes_val = *opti_passes.read();
                                                             let mfg_choice_val = *mfg_choice.read();
                                                             let mfg_multiplier_val = *mfg_multiplier.read();
+                                                            let sm86_choice_val = *sm86_choice.read();
+                                                            let sm86_multiplier_val = *sm86_multiplier.read();
                                                             let nr_style_choice_val = *nr_style_choice.read();
                                                             let nr_style_val = if nr_style_choice_val { *nr_style_preset.read() } else { 0 };
                                                             move |_| {
@@ -4652,6 +4698,28 @@ pub fn App() -> Element {
                                                                             updated_game.nr_style_enabled = nr_style_choice_val;
                                                                             updated_game.mfg_multiplier = mfg_multiplier_val;
                                                                             updated_game.has_backup = true;
+
+                                                                             if sm86_choice_val {
+                                                                                 let game_for_sm86 = updated_game.clone();
+                                                                                 let mult = sm86_multiplier_val;
+                                                                                 match tokio::task::spawn_blocking(move || {
+                                                                                     let mut l = Vec::new();
+                                                                                     let r = crate::core::sm86::install(&game_for_sm86, mult, &mut l);
+                                                                                     (r, l)
+                                                                                 }).await {
+                                                                                     Ok((Ok(()), l)) => {
+                                                                                         for line in &l { log_message(line); }
+                                                                                         lines.extend(l);
+                                                                                     }
+                                                                                     Ok((Err(e), l)) => {
+                                                                                         lines.push(format!("[ERROR] SM86: {}", e));
+                                                                                         for line in &l { log_message(line); }
+                                                                                     }
+                                                                                     Err(e) => {
+                                                                                         lines.push(format!("[ERROR] SM86 task: {}", e));
+                                                                                     }
+                                                                                 }
+                                                                             }
 
                                                                             let mut current_games = games.read().clone();
                                                                             if let Some(pos) = current_games.iter().position(|g| g.dir == updated_game.dir) {
@@ -5357,14 +5425,21 @@ pub fn App() -> Element {
                                                 streamline_modal_downloading.set(false);
                                                 match res {
                                                     Ok(_) => {
-                                                        copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_verified_success").to_string());
-                                                        *toast_generation.write() += 1;
-                                                        copy_toast.set(true);
                                                         let list = crate::core::addons::check_all_addon_updates_force().await;
                                                         let mut map = std::collections::HashMap::new();
                                                         for item in list { map.insert(item.id, item); }
                                                         addon_updates.set(map);
-                                                        show_streamline_guidance_modal.set(false);
+                                                        if crate::core::addons::is_streamline_complete() {
+                                                            copy_toast_text.set(crate::core::i18n::t(&current_lang.read(), "modal_streamline_verified_success").to_string());
+                                                            *toast_generation.write() += 1;
+                                                            copy_toast.set(true);
+                                                            show_streamline_guidance_modal.set(false);
+                                                        } else {
+                                                            let mut missing = Vec::new();
+                                                            if !crate::core::addons::is_streamline_cached() { missing.push("sl.interposer.dll"); }
+                                                            if !crate::core::addons::is_dlssnr_cached() { missing.push("nvngx_dlssnr.dll"); }
+                                                            streamline_modal_msg.set(crate::core::i18n::t_param(&current_lang.read(), "modal_streamline_missing", &missing.join(", ")));
+                                                        }
                                                     }
                                                     Err(e) => {
                                                         streamline_modal_msg.set(format!("Error: {}", e));
