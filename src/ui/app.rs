@@ -4293,6 +4293,7 @@ pub fn App() -> Element {
                                                     div { class: "t",
                                                         label { r#for: "chkSm86", class: "t-left", style: "cursor: pointer;",
                                                             span { "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_title\")}" }
+                                                            span { class: "tag warn", "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_tag\")}" }
                                                         }
                                                         div { class: "passes-ctrl",
                                                             span { "{crate::core::i18n::t(&current_lang.read(), \"sm86_sheet_multiplier\")}" }

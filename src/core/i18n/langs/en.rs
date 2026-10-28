@@ -524,6 +524,7 @@ pub fn lookup(key: &str) -> Option<&'static str> {
         "sm86_download_failed" => Some("Download failed: {0}"),
         "sm86_install_failed" => Some("Install failed: {0}"),
         "sm86_sheet_title" => Some("SM86 Frame Generation"),
+        "sm86_sheet_tag" => Some("Experimental"),
         "sm86_sheet_desc" => Some("Deploys the experimental dlssg_for_sm86 runtime (RTX 30/20)."),
         "sm86_sheet_multiplier" => Some("Multiplier"),
         "sm86_issues_title" => Some("Runtime issues"),
