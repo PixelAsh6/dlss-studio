@@ -3553,7 +3553,6 @@ pub fn App() -> Element {
                                 };
                                 let lang_check = lang.clone();
                                 let lang_dl = lang.clone();
-                                let sm86_games: Vec<GameEntry> = games.read().iter().cloned().collect();
                                 rsx! {
                                     div { class: "set-row", style: "display:block; padding:12px 0; border-bottom:1px solid var(--line);",
                                         div { style: "display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;",
@@ -3645,90 +3644,7 @@ pub fn App() -> Element {
                                                 "{crate::core::i18n::t(&lang, \"status_downloading_components\")}"
                                             }
                                         }
-                                        div { style: "max-height: 260px; overflow-y: auto;",
-                                            for g in &sm86_games {
-                                                {
-                                                    let norm = crate::core::state::paths::normalize_game_path(&g.dir);
-                                                    let installed = crate::core::sm86::installed_version(&g);
-                                                    let is_update = installed.clone().map(|c| {
-                                                        sm86_upstream.read().clone().map(|u| crate::core::addons::is_newer_version(&c, &u)).unwrap_or(false)
-                                                    }).unwrap_or(false);
-                                                    let row_lang = lang.clone();
-                                                    let lang_install = row_lang.clone();
-                                                    let lang_remove = row_lang.clone();
-                                                    let g_install = g.clone();
-                                                    let g_remove = g.clone();
-                                                    rsx! {
-                                                        div { key: "{norm}", style: "display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);",
-                                                            div { style: "min-width:0; flex:1;",
-                                                                div { style: "font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;", "{g.name}" }
-                                                                div { class: "dim", style: "font-size:0.75em;",
-                                                                    if g.has_anti_cheat {
-                                                                        span { style: "color: var(--warning, #e5a53b);", "{crate::core::i18n::t(&row_lang, \"sheet_anticheat_title\")}" }
-                                                                    } else if let Some(v) = &installed {
-                                                                        "{crate::core::i18n::t_param(&row_lang, \"sm86_installed_v\", v)}"
-                                                                    } else {
-                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_not_installed\")}"
-                                                                    }
-                                                                }
-                                                            }
-                                                            div { style: "display:flex; gap:8px; flex-shrink:0;",
-                                                                button {
-                                                                    class: "ghost sm",
-                                                                    disabled: *sm86_busy.read(),
-                                                                    onclick: move |_| {
-                                                                        let lang = lang_install.clone();
-                                                                        let game = g_install.clone();
-                                                                        spawn(async move {
-                                                                            sm86_busy.set(true);
-                                                                            sm86_status.set(None);
-                                                                            let mut log = Vec::new();
-                                                                            match crate::core::sm86::install(&game, 4, &mut log) {
-                                                                                Ok(()) => sm86_status.set(None),
-                                                                                Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
-                                                                            }
-                                                                            for line in log { log_message(&line); }
-                                                                            sm86_busy.set(false);
-                                                                            let cur = *sm86_refresh.read();
-                                                                            sm86_refresh.set(cur + 1);
-                                                                        });
-                                                                    },
-                                                                    if installed.is_some() && is_update {
-                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_update\")}"
-                                                                    } else {
-                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_install\")}"
-                                                                    }
-                                                                }
-                                                                if installed.is_some() {
-                                                                    button {
-                                                                        class: "ghost sm",
-                                                                        disabled: *sm86_busy.read(),
-                                                                        onclick: move |_| {
-                                                                            let lang = lang_remove.clone();
-                                                                            let game = g_remove.clone();
-                                                                            spawn(async move {
-                                                                                sm86_busy.set(true);
-                                                                                sm86_status.set(None);
-                                                                                let mut log = Vec::new();
-                                                                                match crate::core::sm86::uninstall(&game, &mut log) {
-                                                                                    Ok(_) => sm86_status.set(None),
-                                                                                    Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
-                                                                                }
-                                                                                for line in log { log_message(&line); }
-                                                                                sm86_busy.set(false);
-                                                                                let cur = *sm86_refresh.read();
-                                                                                sm86_refresh.set(cur + 1);
-                                                                            });
-                                                                        },
-                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_remove\")}"
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
+
                                     }
                                 }
                             }
