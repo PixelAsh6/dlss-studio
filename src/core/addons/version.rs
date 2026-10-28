@@ -412,7 +412,7 @@ pub async fn check_addon_update(id: AddonId) -> AddonVersionInfo {
             (Some(super::catalog::RENODX_DLSS_LATEST_TAG.to_string()), Some(RENODX_DLSS_URL.to_string()))
         }
         AddonId::DlssMipFix => {
-            if let Ok((url, tag)) = resolve_github_latest_asset("bookamp/dlss-studio", |name| {
+            if let Ok((url, tag)) = resolve_github_latest_asset("PixelAsh6/dlss-studio", |name| {
                 name.contains("dlss-mip-fix")
             }).await {
                 (Some(tag), Some(url))

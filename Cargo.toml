@@ -10,7 +10,7 @@ version = "2.0.3"
 edition = "2021"
 default-run = "dlss-studio"
 description = "DLSS Studio - Ultra-low latency, low-memory DLSS 5 & OptiScaler Pre-SR Manager in Pure Rust"
-repository = "https://github.com/bookamp/dlss-studio"
+repository = "https://github.com/PixelAsh6/dlss-studio"
 license = "MIT"
 
 [lib]

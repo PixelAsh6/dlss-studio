@@ -34,8 +34,8 @@ pub const OPTISCALER_SHA256: &str = "0d5b24887ea2c622754da68efc76ef55ae42b5d3be3
 pub const OPTISCALER_FALLBACK_URL: &str = OPTISCALER_URL;
 pub const OPTISCALER_MFG_FALLBACK_URL: &str = OPTISCALER_URL;
 
-pub const DLSS_MIP_FIX_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-mip-fix.addon64";
-pub const DLSS_NR_URL: &str = "https://github.com/bookamp/dlss-studio/releases/latest/download/dlss-nr.addon64";
+pub const DLSS_MIP_FIX_URL: &str = "https://github.com/PixelAsh6/dlss-studio/releases/latest/download/dlss-mip-fix.addon64";
+pub const DLSS_NR_URL: &str = "https://github.com/PixelAsh6/dlss-studio/releases/latest/download/dlss-nr.addon64";
 
 pub const CDN_BASE_URL: &str = "https://pub-fc0eb49bf297443d8eb1e209c15135fe.r2.dev";
 pub const RENODX_REPO_URL: &str = CDN_BASE_URL;

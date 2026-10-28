@@ -10,7 +10,7 @@
 [![i18n](https://img.shields.io/badge/i18n-14%20Languages-yellow.svg)](#)
 [![Memory](https://img.shields.io/badge/RAM%20usage-~20%20MB-green.svg)](#)
 [![Binary Size](https://img.shields.io/badge/Portable%20Exe-5.9%20MB-success.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-purple.svg)](https://github.com/bookamp/dlss-studio/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-purple.svg)](https://github.com/PixelAsh6/dlss-studio/blob/main/LICENSE)
 
 **DLSS 5 STUDIO** is a ground-up pure Rust desktop utility engineered for extreme speed and minimal resource usage. It enables gamers to inject and upgrade modern DLSS features, Neural Reconstruction, and OptiScaler Pre-SR across their game libraries—with **3x/4x Multi-Frame Generation unlocked specifically for GeForce RTX 40-Series GPUs**.
 
@@ -139,7 +139,7 @@ Scans and organizes your games automatically without manual configuration:
 
 ### Portable Executable
 
-1. Download **`dlss-studio-v<version>-portable.exe`** from the [Releases](https://github.com/bookamp/dlss-studio/releases) page.
+1. Download **`dlss-studio-v<version>-portable.exe`** from the [Releases](https://github.com/PixelAsh6/dlss-studio/releases) page.
 2. Run from anywhere—no installation required.
 
 ---
@@ -173,4 +173,4 @@ Scans and organizes your games automatically without manual configuration:
 
 ## 📜 License
 
-This project is licensed under the MIT License. See [LICENSE](https://github.com/bookamp/dlss-studio/blob/main/LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](https://github.com/PixelAsh6/dlss-studio/blob/main/LICENSE) for details.
