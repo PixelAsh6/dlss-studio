@@ -8,6 +8,7 @@ pub mod payloads;
 pub mod platform;
 pub mod routes;
 pub mod scan;
+pub mod sm86;
 pub mod state;
 pub mod steamart;
 pub mod utils;

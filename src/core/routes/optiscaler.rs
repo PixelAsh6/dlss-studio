@@ -193,6 +193,7 @@ pub fn deploy_optiscaler_with_bundle(opts: &DeployOptions, payloads: &PayloadBun
         nr_style: Some(opts.nr_style),
         opti_presr: Some(opts.pre_sr),
         opti_passes: Some(opts.passes),
+        sm86_version: None,
     };
 
     carry_forward_existing_backups(&opts.game_dir, &backup_dir, &mut manifest, &mut log);

@@ -134,6 +134,7 @@ fn test_manifest_preserves_target_exe_and_patch_state() {
         nr_style: Some(0),
         opti_presr: Some(false),
         opti_passes: Some(1),
+        sm86_version: None,
     };
     fs::write(bdir.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
 
@@ -277,6 +278,7 @@ fn test_mod_added_dlssg_does_not_flag_native_frame_generation() {
         nr_style: None,
         opti_presr: None,
         opti_passes: None,
+        sm86_version: None,
     };
     fs::write(backup_dir.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
 
@@ -457,6 +459,7 @@ fn test_has_native_dlss_active_mod_adding_dlss_is_not_native() {
         nr_style: None,
         opti_presr: None,
         opti_passes: None,
+        sm86_version: None,
     };
     fs::write(bdir.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
 

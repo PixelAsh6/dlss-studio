@@ -60,6 +60,8 @@ pub struct ActiveManifest {
     pub opti_presr: Option<bool>,
     #[serde(default)]
     pub opti_passes: Option<u32>,
+    #[serde(default)]
+    pub sm86_version: Option<String>,
 }
 
 fn default_manifest_version() -> u32 {
@@ -84,6 +86,7 @@ impl Default for ActiveManifest {
             nr_style: None,
             opti_presr: None,
             opti_passes: None,
+            sm86_version: None,
         }
     }
 }

@@ -252,6 +252,9 @@ pub fn App() -> Element {
     let init_cached_games = init_state.cached_games.clone();
     let init_recents = init_state.recents.clone();
     let init_hidden_count = init_state.hidden.len();
+    let init_sm86_mode = init_state.sm86_update_mode.clone();
+    let init_sm86_last_check = init_state.sm86_last_check;
+    let init_sm86_upstream = init_state.sm86_upstream_version.clone();
 
     let mut gpus = use_signal(|| vec![GpuInfo {
         name: "DirectX 12 Physical Device".to_string(),
@@ -470,6 +473,16 @@ pub fn App() -> Element {
     let mut addon_update_batch_active = use_signal(|| false);
     let mut active_updating_addon = use_signal(|| None::<crate::core::addons::AddonId>);
 
+    // SM86 (RTX 30 frame generation) state
+    let mut sm86_mode = use_signal(move || init_sm86_mode);
+    let mut sm86_last_check = use_signal(move || init_sm86_last_check);
+    let mut sm86_upstream = use_signal(move || init_sm86_upstream);
+    let mut sm86_cached = use_signal(|| Option::<String>::None);
+    let mut sm86_status = use_signal(|| Option::<String>::None);
+    let mut sm86_busy = use_signal(|| false);
+    let mut sm86_installed = use_signal(|| std::collections::HashMap::<String, Option<String>>::new());
+    let mut sm86_refresh = use_signal(|| 0usize);
+
     use_effect(move || {
         let _ = *trigger_addon_update_check.read();
         spawn(async move {
@@ -481,6 +494,50 @@ pub fn App() -> Element {
             }
             addon_updates.set(map);
             is_checking_addon_updates.set(false);
+        });
+    });
+
+    // SM86 daily update check. Hourly wake-up; the persisted 20h gate inside
+    // core::sm86::daily_check makes this effectively once per day.
+    use_effect(move || {
+        spawn(async move {
+            loop {
+                if *sm86_mode.read() != "off" {
+                    let out = crate::core::sm86::daily_check(false).await;
+                    if out.checked {
+                        sm86_last_check.set(Some(crate::core::sm86::now_secs()));
+                        sm86_upstream.set(out.latest.clone());
+                        sm86_cached.set(crate::core::sm86::cached_version());
+                        if let Some(v) = out.downloaded {
+                            sm86_status.set(Some(crate::core::i18n::t_param(&current_lang.read(), "sm86_updated_toast", &v)));
+                        } else if let Some(err) = out.error {
+                            sm86_status.set(Some(crate::core::i18n::t_param(&current_lang.read(), "sm86_check_failed", &err)));
+                        } else if *sm86_mode.read() == "notify" {
+                            // Notify-only mode: surface the newer upstream tag.
+                            if let (Some(latest), Some(cached)) = (sm86_upstream.read().clone(), sm86_cached.read().clone()) {
+                                if crate::core::addons::is_newer_version(&cached, &latest) {
+                                    sm86_status.set(Some(crate::core::i18n::t_param(&current_lang.read(), "sm86_updated_toast", &latest)));
+                                }
+                            }
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            }
+        });
+    });
+
+    // Refresh the SM86 status map when the settings view opens or after an
+    // install/remove/download action completes.
+    use_effect(move || {
+        let _ = *sm86_refresh.read();
+        if *active_view.read() != "settings" {
+            return;
+        }
+        spawn(async move {
+            sm86_cached.set(crate::core::sm86::cached_version());
+            let list = games.read().clone();
+            sm86_installed.set(crate::core::sm86::scan_installed(&list).into_iter().collect());
         });
     });
     let mut dlg_path = use_signal(String::new);
@@ -2127,7 +2184,7 @@ pub fn App() -> Element {
                                             }
                                             div { class: "d", "dlss-mip-fix.addon64 \u{00B7} Pure Rust Add-on \u{00B7} 147 KB" }
                                             div { class: "dim", style: "font-size:0.75em; margin-top:3px; opacity:0.75; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/bookamp/dlss-studio"
+                                                "{crate::core::i18n::t(&current_lang.read(), \"label_source\")} https://github.com/PixelAsh6/dlss-studio"
                                             }
                                             div { class: "dim", style: "font-size:0.82em; margin-top:4px;",
                                                 "{crate::core::i18n::t(&current_lang.read(), \"addon_dlss5_d3d12_fix_desc\")}"
@@ -3477,6 +3534,200 @@ pub fn App() -> Element {
                                     span { "{crate::core::i18n::t(&current_lang.read(), \"diag_ada_standard\")}" }
                                 }
                             }
+
+                            // ---------------- SM86 FRAME GENERATION ----------------
+                            {
+                                let lang = current_lang.read().clone();
+                                let update_avail = sm86_upstream.read().clone().map(|latest| {
+                                    sm86_cached.read().clone().map(|c| crate::core::addons::is_newer_version(&c, &latest)).unwrap_or(true)
+                                }).unwrap_or(false);
+                                let cached_label = sm86_cached.read().clone().unwrap_or_else(|| "-".into());
+                                let upstream_label = sm86_upstream.read().clone().unwrap_or_else(|| "-".into());
+                                let last_check_label = {
+                                    let last = *sm86_last_check.read();
+                                    last.map(|t| crate::core::state::ago_localized(&lang, t * 1000)).unwrap_or_else(|| crate::core::i18n::t(&lang, "sm86_never").to_string())
+                                };
+                                let lang_check = lang.clone();
+                                let lang_dl = lang.clone();
+                                let sm86_games: Vec<GameEntry> = games.read().iter().cloned().collect();
+                                rsx! {
+                                    div { class: "set-row", style: "display:block; padding:12px 0; border-bottom:1px solid var(--line);",
+                                        div { style: "display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;",
+                                            div {
+                                                div { class: "k", style: "font-weight:600;", "{crate::core::i18n::t(&lang, \"sm86_title\")}" }
+                                                div { class: "v", style: "font-size:0.85em; color:var(--dim);", "{crate::core::i18n::t(&lang, \"sm86_desc\")}" }
+                                            }
+                                            select {
+                                                value: "{sm86_mode}",
+                                                onchange: move |e| {
+                                                    let v = e.value();
+                                                    sm86_mode.set(v.clone());
+                                                    let mut s = load_state();
+                                                    s.sm86_update_mode = v;
+                                                    let _ = save_state(&s);
+                                                },
+                                                option { value: "auto", "{crate::core::i18n::t(&lang, \"sm86_mode_auto\")}" }
+                                                option { value: "notify", "{crate::core::i18n::t(&lang, \"sm86_mode_notify\")}" }
+                                                option { value: "off", "{crate::core::i18n::t(&lang, \"sm86_mode_off\")}" }
+                                            }
+                                        }
+                                        div { style: "display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0 4px 0;",
+                                            span { class: "dim", style: "font-size:0.8em;",
+                                                "{crate::core::i18n::t(&lang, \"sm86_cached\")}: {cached_label} \u{00B7} {crate::core::i18n::t(&lang, \"sm86_upstream\")}: {upstream_label} \u{00B7} {crate::core::i18n::t(&lang, \"sm86_last_check\")}: {last_check_label}"
+                                            }
+                                            div { style: "display:flex; gap:8px;",
+                                                button {
+                                                    class: "ghost sm",
+                                                    disabled: *sm86_busy.read(),
+                                                    onclick: move |_| {
+                                                        let lang = lang_check.clone();
+                                                        spawn(async move {
+                                                            sm86_busy.set(true);
+                                                            sm86_status.set(None);
+                                                            let out = crate::core::sm86::daily_check(true).await;
+                                                            sm86_busy.set(false);
+                                                            if out.checked {
+                                                                sm86_last_check.set(Some(crate::core::sm86::now_secs()));
+                                                                sm86_upstream.set(out.latest.clone());
+                                                                sm86_cached.set(crate::core::sm86::cached_version());
+                                                                if let Some(v) = out.downloaded {
+                                                                    sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_downloaded_toast", &v)));
+                                                                } else if let Some(err) = out.error {
+                                                                    sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_check_failed", &err)));
+                                                                }
+                                                            } else if let Some(err) = out.error {
+                                                                sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_check_failed", &err)));
+                                                            }
+                                                            let cur = *sm86_refresh.read();
+                                                            sm86_refresh.set(cur + 1);
+                                                        });
+                                                    },
+                                                    "{crate::core::i18n::t(&lang, \"btn_check_updates\")}"
+                                                }
+                                                if update_avail || (sm86_cached.read().is_none() && !sm86_upstream.read().is_none()) {
+                                                    button {
+                                                        class: "ghost sm",
+                                                        disabled: *sm86_busy.read(),
+                                                        onclick: move |_| {
+                                                            let lang = lang_dl.clone();
+                                                            spawn(async move {
+                                                                sm86_busy.set(true);
+                                                                sm86_status.set(None);
+                                                                let mut log = Vec::new();
+                                                                match crate::core::sm86::download_latest(&mut log).await {
+                                                                    Ok(v) => {
+                                                                        sm86_cached.set(Some(v.clone()));
+                                                                        sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_downloaded_toast", &v)));
+                                                                    }
+                                                                    Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_download_failed", &e))),
+                                                                }
+                                                                for line in log { log_message(&line); }
+                                                                sm86_busy.set(false);
+                                                                let cur = *sm86_refresh.read();
+                                                                sm86_refresh.set(cur + 1);
+                                                            });
+                                                        },
+                                                        "{crate::core::i18n::t(&lang, \"sm86_btn_download\")}"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if let Some(status) = sm86_status.read().clone() {
+                                            div { class: "dim", style: "font-size:0.8em; padding-bottom:6px;", "{status}" }
+                                        }
+                                        if *sm86_busy.read() {
+                                            div { class: "dim", style: "font-size:0.8em; padding-bottom:6px;",
+                                                span { class: "spin-icon" }
+                                                "{crate::core::i18n::t(&lang, \"status_downloading_components\")}"
+                                            }
+                                        }
+                                        div { style: "max-height: 260px; overflow-y: auto;",
+                                            for g in &sm86_games {
+                                                {
+                                                    let norm = crate::core::state::paths::normalize_game_path(&g.dir);
+                                                    let installed = sm86_installed.read().get(&norm).cloned().flatten();
+                                                    let is_update = installed.clone().map(|c| {
+                                                        sm86_upstream.read().clone().map(|u| crate::core::addons::is_newer_version(&c, &u)).unwrap_or(false)
+                                                    }).unwrap_or(false);
+                                                    let row_lang = lang.clone();
+                                                    let lang_install = row_lang.clone();
+                                                    let lang_remove = row_lang.clone();
+                                                    let g_install = g.clone();
+                                                    let g_remove = g.clone();
+                                                    rsx! {
+                                                        div { key: "{norm}", style: "display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);",
+                                                            div { style: "min-width:0; flex:1;",
+                                                                div { style: "font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;", "{g.name}" }
+                                                                div { class: "dim", style: "font-size:0.75em;",
+                                                                    if g.has_anti_cheat {
+                                                                        span { style: "color: var(--warning, #e5a53b);", "{crate::core::i18n::t(&row_lang, \"sheet_anticheat_title\")}" }
+                                                                    } else if let Some(v) = &installed {
+                                                                        "{crate::core::i18n::t_param(&row_lang, \"sm86_installed_v\", v)}"
+                                                                    } else {
+                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_not_installed\")}"
+                                                                    }
+                                                                }
+                                                            }
+                                                            div { style: "display:flex; gap:8px; flex-shrink:0;",
+                                                                button {
+                                                                    class: "ghost sm",
+                                                                    disabled: *sm86_busy.read(),
+                                                                    onclick: move |_| {
+                                                                        let lang = lang_install.clone();
+                                                                        let game = g_install.clone();
+                                                                        spawn(async move {
+                                                                            sm86_busy.set(true);
+                                                                            sm86_status.set(None);
+                                                                            let mut log = Vec::new();
+                                                                            match crate::core::sm86::install(&game, &mut log) {
+                                                                                Ok(()) => sm86_status.set(None),
+                                                                                Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
+                                                                            }
+                                                                            for line in log { log_message(&line); }
+                                                                            sm86_busy.set(false);
+                                                                            let cur = *sm86_refresh.read();
+                                                                            sm86_refresh.set(cur + 1);
+                                                                        });
+                                                                    },
+                                                                    if installed.is_some() && is_update {
+                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_update\")}"
+                                                                    } else {
+                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_install\")}"
+                                                                    }
+                                                                }
+                                                                if installed.is_some() {
+                                                                    button {
+                                                                        class: "ghost sm",
+                                                                        disabled: *sm86_busy.read(),
+                                                                        onclick: move |_| {
+                                                                            let lang = lang_remove.clone();
+                                                                            let game = g_remove.clone();
+                                                                            spawn(async move {
+                                                                                sm86_busy.set(true);
+                                                                                sm86_status.set(None);
+                                                                                let mut log = Vec::new();
+                                                                                match crate::core::sm86::remove(&game, &mut log) {
+                                                                                    Ok(_) => sm86_status.set(None),
+                                                                                    Err(e) => sm86_status.set(Some(crate::core::i18n::t_param(&lang, "sm86_install_failed", &e))),
+                                                                                }
+                                                                                for line in log { log_message(&line); }
+                                                                                sm86_busy.set(false);
+                                                                                let cur = *sm86_refresh.read();
+                                                                                sm86_refresh.set(cur + 1);
+                                                                            });
+                                                                        },
+                                                                        "{crate::core::i18n::t(&row_lang, \"sm86_btn_remove\")}"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3494,9 +3745,9 @@ pub fn App() -> Element {
                             p { b { "DLSS 5 Studio v{crate::core::APP_VERSION}" } }
                             p { "{crate::core::i18n::t(&current_lang.read(), \"about_desc_main\")}" }
                             div { class: "about-links", style: "display:flex; flex-wrap:wrap; gap:10px; margin: 16px 0;",
-                                a { class: "glass-btn", href: "https://github.com/bookamp/dlss-studio", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_github_repo\")}" }
-                                a { class: "glass-btn", href: "https://github.com/bookamp/dlss-studio/releases", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_releases\")}" }
-                                a { class: "glass-btn", href: "https://github.com/bookamp/dlss-studio/issues", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_report_issue\")}" }
+                                a { class: "glass-btn", href: "https://github.com/PixelAsh6/dlss-studio", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_github_repo\")}" }
+                                a { class: "glass-btn", href: "https://github.com/PixelAsh6/dlss-studio/releases", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_releases\")}" }
+                                a { class: "glass-btn", href: "https://github.com/PixelAsh6/dlss-studio/issues", target: "_blank", "{crate::core::i18n::t(&current_lang.read(), \"about_report_issue\")}" }
                             }
                             p { class: "dim", "{crate::core::i18n::t(&current_lang.read(), \"about_desc_sub\")}" }
                         }

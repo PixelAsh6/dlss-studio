@@ -237,6 +237,7 @@ fn test_optiscaler_advisory_not_suppressed_when_feeder_mod_installed() {
         nr_style: None,
         opti_presr: None,
         opti_passes: None,
+        sm86_version: None,
     };
     std::fs::write(temp.join("_DLSS5_Backup\\manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
 

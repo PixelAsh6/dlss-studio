@@ -85,6 +85,8 @@ pub fn default_false() -> bool { false }
 pub fn default_overlay_theme() -> String { "green".to_string() }
 pub fn default_overlay_hotkey() -> String { "F8".to_string() }
 
+pub fn default_sm86_mode() -> String { "auto".to_string() }
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppState {
     #[serde(default)]
@@ -135,6 +137,12 @@ pub struct AppState {
     pub custom_names: HashMap<String, String>,
     #[serde(default = "default_false", rename = "vibepolloAutoAdd")]
     pub vibepollo_auto_add: bool,
+    #[serde(default = "default_sm86_mode", rename = "sm86UpdateMode")]
+    pub sm86_update_mode: String,
+    #[serde(default, rename = "sm86LastCheck")]
+    pub sm86_last_check: Option<u64>,
+    #[serde(default, rename = "sm86UpstreamVersion")]
+    pub sm86_upstream_version: Option<String>,
 }
 
 impl Default for AppState {
@@ -164,6 +172,9 @@ impl Default for AppState {
             custom_overlay_themes: Vec::new(),
             custom_names: HashMap::new(),
             vibepollo_auto_add: false,
+            sm86_update_mode: default_sm86_mode(),
+            sm86_last_check: None,
+            sm86_upstream_version: None,
         }
     }
 }
