@@ -1,0 +1,135 @@
+name: Daily sync & release
+
+# Syncs upstream bookamp/dlss-studio into main, builds the release binaries
+# and publishes a GitHub release with a date-stamped tag (v<pkgver>-dd.mm.yyyy).
+# The RTX 30 SM86 runtime is NOT bundled: dlss-studio downloads it at runtime
+# from sdli1995/dlssg_for_sm86 and verifies it against the GitHub digest.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Build and release even if upstream has no new commits'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-and-build
+  cancel-in-progress: false
+
+jobs:
+  sync_and_build:
+    name: Sync upstream, build & release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream
+        id: sync
+        shell: bash
+        env:
+          FORCE: ${{ inputs.force_release }}
+        run: |
+          set -euo pipefail
+          git config user.name "PixelAsh6"
+          git config user.email "PixelAsh6@users.noreply.github.com"
+          git remote add upstream https://github.com/bookamp/dlss-studio.git
+          git fetch upstream main
+
+          PREV_SHA=$(git rev-parse HEAD)
+          AHEAD=$(git rev-list HEAD..upstream/main --count)
+
+          if [ "$AHEAD" = "0" ] && [ "$FORCE" != "true" ]; then
+            echo "No new upstream commits; nothing to sync."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Upstream is $AHEAD commit(s) ahead; merging..."
+          # Fork preference wins on conflict so the daily run never stalls.
+          git merge upstream/main --no-edit -X ours
+
+          git push origin main
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "prev_sha=$PREV_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust toolchain
+        if: steps.sync.outputs.release == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        if: steps.sync.outputs.release == 'true'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run test suite
+        if: steps.sync.outputs.release == 'true'
+        run: cargo test --workspace --verbose
+
+      - name: Build release binaries
+        if: steps.sync.outputs.release == 'true'
+        id: build
+        shell: powershell
+        run: |
+          $cargoToml = Get-Content -Path "Cargo.toml" -Raw
+          if ($cargoToml -match '(?m)^version\s*=\s*"([^"]+)"') {
+              $version = $matches[1]
+          } else {
+              $version = "1.0.0"
+          }
+          Write-Host "Building release binaries for v$version..."
+          cargo build --release --bin dlss-studio
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release --bin dlss-studio-setup
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release -p dlss-mip-addon
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -Path "target\release\dlss-studio.exe" -Destination "target\release\dlss-studio-v$version-portable.exe" -Force
+          Copy-Item -Path "target\release\dlss-studio-setup.exe" -Destination "target\release\dlss-studio-v$version-setup.exe" -Force
+          Copy-Item -Path "target\release\dlss_mip_addon.dll" -Destination "target\release\dlss-mip-fix.addon64" -Force
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare tag & release notes
+        if: steps.sync.outputs.release == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ steps.build.outputs.version }}"
+          TAG="v${VER}-$(date -u +%d.%m.%Y)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Sync build (\`$TAG\`)"
+            echo ""
+            echo "Automatic daily sync of upstream \`bookamp/dlss-studio\` into the fork."
+            echo ""
+            echo "### Upstream commits in this build"
+            echo ""
+            if git log --oneline "${{ steps.sync.outputs.prev_sha }}..upstream/main" 2>/dev/null | head -50; then true; fi
+            echo ""
+            echo "The RTX 30 SM86 frame generation runtime is not bundled in these assets; the app downloads the latest release from [sdli1995/dlssg_for_sm86](https://github.com/sdli1995/dlssg_for_sm86) at runtime and verifies it against the GitHub-published SHA-256."
+          } > release_notes.md
+
+      - name: Publish GitHub Release
+        if: steps.sync.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: release_notes.md
+          files: |
+            target/release/dlss-studio-v*-portable.exe
+            target/release/dlss-studio-v*-setup.exe
+            target/release/dlss-mip-fix.addon64
+          fail_on_unmatched_files: true
+          make_latest: true
